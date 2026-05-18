@@ -292,7 +292,29 @@ interface MediaItem {
 }
 
 interface CaptureFormProps {
-  initialData?: { id?: string; media?: MediaItem[]; externalLinks?: string[]; customInfo?: unknown; [key: string]: unknown };
+  initialData?: {
+    id?: string;
+    name?: string;
+    localName?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+    elevation?: number | null;
+    region?: string | null;
+    state?: string | null;
+    country?: string | null;
+    category?: string | null;
+    bestSeason?: string | null;
+    whySaved?: string | null;
+    expeditionDreams?: string | null;
+    futureIdeas?: string | null;
+    emotionalNotes?: string | null;
+    comparisons?: string | null;
+    explorationStatus?: string | null;
+    media?: MediaItem[];
+    externalLinks?: string[];
+    customInfo?: unknown;
+    [key: string]: unknown;
+  };
   onSuccess: (discovery: { id: string }) => void;
   onCancel: () => void;
 }
@@ -321,6 +343,29 @@ export function CaptureForm({ initialData, onSuccess, onCancel }: CaptureFormPro
       explorationStatus: ExplorationStatus.RESEARCHING,
     },
   });
+
+  React.useEffect(() => {
+    if (initialData) {
+      form.reset({
+        name: initialData.name || '',
+        localName: initialData.localName || '',
+        latitude: initialData.latitude ?? undefined,
+        longitude: initialData.longitude ?? undefined,
+        elevation: initialData.elevation ?? undefined,
+        region: initialData.region || '',
+        state: initialData.state || '',
+        country: initialData.country || '',
+        category: (initialData.category as TerrainCategory) || TerrainCategory.SUMMIT,
+        bestSeason: initialData.bestSeason || '',
+        whySaved: initialData.whySaved || '',
+        expeditionDreams: initialData.expeditionDreams || '',
+        futureIdeas: initialData.futureIdeas || '',
+        emotionalNotes: initialData.emotionalNotes || '',
+        comparisons: initialData.comparisons || '',
+        explorationStatus: (initialData.explorationStatus as ExplorationStatus) || ExplorationStatus.RESEARCHING,
+      });
+    }
+  }, [initialData, form]);
 
   const watchedState = useWatch({ control: form.control, name: 'state' });
   const watchedRegion = useWatch({ control: form.control, name: 'region' });
@@ -422,8 +467,13 @@ export function CaptureForm({ initialData, onSuccess, onCancel }: CaptureFormPro
     }
   };
 
+  const onError = (errors: unknown) => {
+    console.error('Form validation errors:', errors);
+    alert('Please fill in all required fields (Name, State).');
+  };
+
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm font-sans">
+    <form onSubmit={form.handleSubmit(onSubmit, onError)} className="space-y-8 bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm font-sans">
       {/* 1. Core Identification & Coordinates */}
       <div className="space-y-4 pt-2">
         <div className="text-xs font-bold text-zinc-800 flex items-center gap-1.5 border-b border-zinc-100 pb-2 uppercase tracking-wider">

@@ -196,6 +196,7 @@ export async function updateDiscovery(
 
   revalidateTag('discoveries', { expire: 0 });
   revalidateTag('discovery-detail', { expire: 0 });
+  revalidateTag(`discovery-detail-${id}`, { expire: 0 });
   revalidateTag('exploration-stats', { expire: 0 });
   revalidatePath('/');
   revalidatePath(`/dossier/${id}`);

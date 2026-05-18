@@ -80,41 +80,112 @@ const MAP_STYLES = {
   }
 };
 
+interface ViewState {
+  latitude: number;
+  longitude: number;
+  zoom: number;
+  bearing: number;
+  pitch: number;
+}
+
 export function MapEngine({ discoveries, onSelectDiscovery }: MapEngineProps) {
   const mapRef = React.useRef<import('react-map-gl/maplibre').MapRef>(null);
-  const [mapMode, setMapMode] = React.useState<'STREET' | 'SATELLITE'>('STREET');
-  const [viewState, setViewState] = React.useState({
-    latitude: 28.3,
-    longitude: 84.1,
-    zoom: 5.2,
-    bearing: 0,
-    pitch: 0,
+
+  // 1. Session Storage Initialization
+  const [mapMode, setMapMode] = React.useState<'STREET' | 'SATELLITE'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('terrain_vault_map_mode');
+      if (saved === 'STREET' || saved === 'SATELLITE') return saved;
+    }
+    return 'STREET';
+  });
+
+  const [viewState, setViewState] = React.useState<ViewState>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('terrain_vault_view_state');
+      if (saved) {
+        try { return JSON.parse(saved) as ViewState; } catch (e) { console.error(e); }
+      }
+    }
+    return {
+      latitude: 28.3,
+      longitude: 84.1,
+      zoom: 5.2,
+      bearing: 0,
+      pitch: 0,
+    };
+  });
+
+  const [clickedLocation, setClickedLocation] = React.useState<{ latitude: number; longitude: number } | null>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('terrain_vault_clicked_location');
+      if (saved) {
+        try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      }
+    }
+    return null;
   });
 
   const [userGeolocation, setUserGeolocation] = React.useState<{ latitude: number; longitude: number } | null>(null);
-  const [clickedLocation, setClickedLocation] = React.useState<{ latitude: number; longitude: number } | null>(null);
   const [copiedPin, setCopiedPin] = React.useState(false);
   const [copiedUserPin, setCopiedUserPin] = React.useState(false);
+
+  // Track if we restored from session storage so we don't overwrite with initial geolocation flyTo
+  const isRestoredSession = React.useRef(false);
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (sessionStorage.getItem('terrain_vault_view_state')) {
+        isRestoredSession.current = true;
+      }
+    }
+  }, []);
+
+  // Save state changes to sessionStorage
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('terrain_vault_map_mode', mapMode);
+    }
+  }, [mapMode]);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('terrain_vault_view_state', JSON.stringify(viewState));
+    }
+  }, [viewState]);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (clickedLocation) {
+        sessionStorage.setItem('terrain_vault_clicked_location', JSON.stringify(clickedLocation));
+      } else {
+        sessionStorage.removeItem('terrain_vault_clicked_location');
+      }
+    }
+  }, [clickedLocation]);
 
   React.useEffect(() => {
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          mapRef.current?.flyTo({
-            center: [position.coords.longitude, position.coords.latitude],
-            zoom: 10,
-            duration: 2000,
-          });
-          setViewState((prev) => ({
-            ...prev,
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            zoom: 10,
-          }));
           setUserGeolocation({
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
           });
+
+          // Only flyTo and update viewState if we didn't restore a saved session state!
+          if (!isRestoredSession.current) {
+            mapRef.current?.flyTo({
+              center: [position.coords.longitude, position.coords.latitude],
+              zoom: 10,
+              duration: 2000,
+            });
+            setViewState((prev) => ({
+              ...prev,
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              zoom: 10,
+            }));
+          }
         },
         (error) => {
           console.warn('Geolocation error:', error);
@@ -227,7 +298,7 @@ export function MapEngine({ discoveries, onSelectDiscovery }: MapEngineProps) {
         {clickedLocation && (
           <Marker latitude={clickedLocation.latitude} longitude={clickedLocation.longitude} anchor="bottom">
             <div
-              className="relative flex flex-col items-center cursor-pointer group animate-bounce"
+              className="relative flex flex-col items-center cursor-pointer group"
               onClick={(e) => {
                 e.stopPropagation();
                 const textToCopy = `${clickedLocation.latitude.toFixed(6)}, ${clickedLocation.longitude.toFixed(6)}`;

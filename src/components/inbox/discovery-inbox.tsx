@@ -27,10 +27,7 @@ interface NewMediaItem {
   mimeType: string;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const createInboxItem = async (_data: unknown) => ({ id: '1' });
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const processInboxItem = async (_id: string, _discId?: string) => ({ id: '1' });
+import { createInboxItem, processInboxItem, getInboxItems, deleteInboxItem } from '@/app/actions/inbox';
 
 interface InboxItemType {
   id: string;
@@ -41,12 +38,10 @@ interface InboxItemType {
   media?: MediaItemType[];
 }
 
-const getInboxItems = async () => [] as InboxItemType[];
 
 interface DiscoveryItemType {
   id: string;
   name: string;
-  category: string;
 }
 
 export function DiscoveryInbox() {
@@ -136,6 +131,14 @@ export function DiscoveryInbox() {
       queryClient.invalidateQueries({ queryKey: ['discoveries-list'] });
     },
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteInboxItem(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inbox-items'] });
+    },
+  });
+
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -283,7 +286,7 @@ export function DiscoveryInbox() {
                       <SelectContent className="bg-white border-zinc-200 text-zinc-800 rounded-xl shadow-lg">
                         {discoveries.map((d: DiscoveryItemType) => (
                           <SelectItem key={d.id} value={d.id} className="text-sm focus:bg-zinc-100 focus:text-zinc-900">
-                            {d.name} ({d.category})
+                            {d.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -295,8 +298,24 @@ export function DiscoveryInbox() {
                       disabled={processMutation.isPending}
                       className="h-11 text-sm bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-800 rounded-xl px-5 font-medium shadow-md"
                     >
-                      <CheckCircle2 className="size-4 mr-2 text-sky-400" /> Process
+                      {processMutation.isPending ? <RefreshCw className="size-4 animate-spin mr-2" /> : <CheckCircle2 className="size-4 mr-2 text-sky-400" />} Process
                     </Button>
+
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        if (confirm('Are you sure you want to discard this raw inbox item?')) {
+                          deleteMutation.mutate(item.id);
+                        }
+                      }}
+                      disabled={deleteMutation.isPending}
+                      className="h-11 text-sm text-zinc-500 hover:text-red-600 hover:bg-red-50 border border-zinc-200 rounded-xl px-4 font-medium"
+                      title="Discard Item"
+                    >
+                      {deleteMutation.isPending ? <RefreshCw className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                    </Button>
+
                   </div>
                 </div>
 

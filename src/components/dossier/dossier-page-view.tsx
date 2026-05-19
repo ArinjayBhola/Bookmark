@@ -52,7 +52,6 @@ interface DossierPageViewProps {
     region?: string | null;
     state?: string | null;
     country?: string | null;
-    category: string;
     routeNotes?: string | null;
     difficulty?: string | null;
     technicality?: string | null;
@@ -70,7 +69,6 @@ interface DossierPageViewProps {
     futureIdeas?: string | null;
     emotionalNotes?: string | null;
     comparisons?: string | null;
-    explorationStatus: string;
     externalLinks?: string[] | null;
     media?: MediaItem[];
     customInfo?: unknown;
@@ -189,15 +187,6 @@ export function DossierPageView({ initialDiscovery }: DossierPageViewProps) {
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent pointer-events-none" />
 
-        <div className="absolute top-6 left-6 flex gap-2.5 z-10 pointer-events-auto">
-          <Badge variant="terrain" className="backdrop-blur-xl bg-white/90 text-sky-600 border border-zinc-200/50 px-3.5 py-1.5 rounded-xl text-xs font-semibold shadow-sm">
-            {discovery.category}
-          </Badge>
-          <Badge variant="status" className="backdrop-blur-xl bg-white/90 text-zinc-700 border border-zinc-200/50 px-3.5 py-1.5 rounded-xl text-xs font-semibold shadow-sm">
-            {discovery.explorationStatus.replace('_', ' ')}
-          </Badge>
-        </div>
-
         {/* Action Buttons */}
         <div className="absolute top-6 right-6 z-10 flex items-center gap-2.5 pointer-events-auto">
           <Button
@@ -284,7 +273,7 @@ export function DossierPageView({ initialDiscovery }: DossierPageViewProps) {
           <div className="text-base font-bold text-zinc-900 truncate mt-1">{discovery.state || 'Unspecified'}</div>
         </div>
         <div
-          onClick={() => handleCopy('Region', discovery.region || discovery.country || 'Unspecified')}
+          onClick={() => handleCopy('Region', discovery.region || 'Unspecified')}
           className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm space-y-1 hover:shadow-md transition-all cursor-pointer group relative"
         >
           <div className="text-xs text-zinc-500 font-bold uppercase flex items-center justify-between tracking-wider">
@@ -295,8 +284,24 @@ export function DossierPageView({ initialDiscovery }: DossierPageViewProps) {
               <Copy className="size-3.5 text-zinc-300 group-hover:text-zinc-600 transition-colors" />
             )}
           </div>
-          <div className="text-base font-bold text-zinc-900 truncate mt-1">{discovery.region || discovery.country || 'Unspecified'}</div>
+          <div className="text-base font-bold text-zinc-900 truncate mt-1">{discovery.region || 'Unspecified'}</div>
         </div>
+        {discovery.country && (
+          <div
+            onClick={() => handleCopy('Country', discovery.country || '')}
+            className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm space-y-1 hover:shadow-md transition-all cursor-pointer group relative"
+          >
+            <div className="text-xs text-zinc-500 font-bold uppercase flex items-center justify-between tracking-wider">
+              <span className="flex items-center gap-1.5"><MapPin className="size-4 text-sky-500" /> Country</span>
+              {copiedField === 'Country' ? (
+                <span className="text-[10px] text-emerald-600 font-extrabold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 animate-fade-in">Copied!</span>
+              ) : (
+                <Copy className="size-3.5 text-zinc-300 group-hover:text-zinc-600 transition-colors" />
+              )}
+            </div>
+            <div className="text-base font-bold text-zinc-900 truncate mt-1">{discovery.country}</div>
+          </div>
+        )}
         {discovery.latitude != null && discovery.longitude != null && (
           <div
             onClick={() => handleCopy('Coordinates', `${discovery.latitude?.toFixed(4)}, ${discovery.longitude?.toFixed(4)}`)}
@@ -355,33 +360,7 @@ export function DossierPageView({ initialDiscovery }: DossierPageViewProps) {
       {gpxFiles.map((gpx: MediaItem) => (
         <GPXViewer key={gpx.id} url={gpx.url} name={discovery.name} />
       ))}
-
-      {/* Gallery */}
-      {images.length > 0 && (
-        <div className="bg-white p-8 rounded-3xl border border-zinc-200 space-y-6 shadow-sm">
-          <div className="text-sm font-bold font-serif text-zinc-900 uppercase tracking-wider border-b border-zinc-100 pb-4 flex items-center justify-between">
-            <span>Expedition Gallery ({images.length})</span>
-            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider bg-zinc-100 px-3 py-1.5 rounded-lg">Cloudflare R2 Storage</span>
-          </div>
-          <div className="grid grid-cols-2 gap-8 pt-2">
-            {images.map((img: MediaItem) => (
-              <div key={img.id} onClick={() => setEnlargedMedia(img)} className="relative group rounded-3xl overflow-hidden border border-zinc-200 bg-zinc-50 aspect-video shadow-md cursor-pointer">
-                <Image
-                  src={getMediaUrl(img)}
-                  alt={img.name}
-                  fill
-                  sizes="(max-width: 768px) 100vw, 50vw"
-                  className="object-cover transition-transform duration-500"
-                />
-                <div className="absolute bottom-0 inset-x-0 bg-white/90 backdrop-blur-md p-4 text-sm font-medium text-zinc-900 truncate border-t border-zinc-200">
-                  {img.name}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
+      
       {/* Documents */}
       {documents.length > 0 && (
         <div className="bg-white p-8 rounded-3xl border border-zinc-200 space-y-6 shadow-sm">

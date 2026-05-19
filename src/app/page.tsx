@@ -3,7 +3,6 @@
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getDiscoveries } from '@/app/actions/discovery';
-import { TerrainCategory, ExplorationStatus } from '@/db/enums';
 import { MapFilterBar } from '@/components/map/map-filter-bar';
 import { MapEngine } from '@/components/map/map-engine';
 import { RefreshCw, Mountain, ShieldCheck, Plus } from 'lucide-react';
@@ -12,21 +11,18 @@ import { useRouter } from 'next/navigation';
 interface DiscoveryMapItem {
   id: string;
   name: string;
-  category: TerrainCategory;
   elevation?: number | null;
-  explorationStatus: string;
   latitude: number;
   longitude: number;
 }
 
 interface HomePageProps {
   onSelectDiscovery?: (id: string) => void;
+  activeDossierId?: string | null;
 }
 
-export default function HomePage({ onSelectDiscovery }: HomePageProps) {
+export default function HomePage({ onSelectDiscovery, activeDossierId }: HomePageProps) {
   const router = useRouter();
-  const [selectedCategory, setSelectedCategory] = React.useState<TerrainCategory | 'ALL'>('ALL');
-  const [selectedStatus, setSelectedStatus] = React.useState<ExplorationStatus | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = React.useState('');
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
 
@@ -36,11 +32,9 @@ export default function HomePage({ onSelectDiscovery }: HomePageProps) {
   }, [searchQuery]);
 
   const { data: discoveries = [], isLoading } = useQuery({
-    queryKey: ['discoveries', selectedCategory, selectedStatus, debouncedSearch],
+    queryKey: ['discoveries', debouncedSearch],
     queryFn: () =>
       getDiscoveries({
-        category: selectedCategory,
-        status: selectedStatus,
         search: debouncedSearch,
       }),
     placeholderData: (previousData) => previousData,
@@ -50,10 +44,6 @@ export default function HomePage({ onSelectDiscovery }: HomePageProps) {
     <div className="w-full h-full relative overflow-hidden bg-[#fafafa]">
       {/* Map Filter Bar */}
       <MapFilterBar
-        selectedCategory={selectedCategory}
-        onSelectCategory={setSelectedCategory}
-        selectedStatus={selectedStatus}
-        onSelectStatus={setSelectedStatus}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         totalCount={discoveries.length}
@@ -65,7 +55,7 @@ export default function HomePage({ onSelectDiscovery }: HomePageProps) {
           <RefreshCw className="size-8 animate-spin text-sky-500" />
           <div className="text-sm font-medium text-zinc-500">Loading Map Data...</div>
         </div>
-      ) : discoveries.length === 0 && selectedCategory === 'ALL' && selectedStatus === 'ALL' && debouncedSearch === '' ? (
+      ) : discoveries.length === 0 && debouncedSearch === '' ? (
         <div className="w-full h-full flex flex-col items-center justify-center bg-[#fafafa] p-6 text-center z-20 relative">
           <div className="p-8 bg-white rounded-3xl border border-zinc-200 shadow-xl max-w-lg space-y-6">
             <div className="flex justify-center">
@@ -92,6 +82,7 @@ export default function HomePage({ onSelectDiscovery }: HomePageProps) {
       ) : (
         <MapEngine
           discoveries={discoveries.filter((d) => d.latitude != null && d.longitude != null) as DiscoveryMapItem[]}
+          activeDossierId={activeDossierId}
           onSelectDiscovery={(id) => {
             if (onSelectDiscovery) {
               onSelectDiscovery(id);

@@ -5,13 +5,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { TerrainCategory, ExplorationStatus, FileType } from '@/db/enums';
+import { FileType } from '@/db/enums';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createDiscovery, updateDiscovery } from '@/app/actions/discovery';
 import { Loader2, Upload, Plus, Trash2, ExternalLink, MapPin, Flag, Settings, FolderPlus } from 'lucide-react';
+import Image from 'next/image';
 
 interface SearchableManageSelectProps {
   storageKey: string;
@@ -265,7 +265,6 @@ const discoverySchema = z.object({
   region: z.string().optional(),
   state: z.string().min(1, 'State is required'),
   country: z.string().optional(),
-  category: z.nativeEnum(TerrainCategory),
 
   whySaved: z.string().optional(),
   expeditionDreams: z.string().optional(),
@@ -273,7 +272,6 @@ const discoverySchema = z.object({
   futureIdeas: z.string().optional(),
   emotionalNotes: z.string().optional(),
   comparisons: z.string().optional(),
-  explorationStatus: z.nativeEnum(ExplorationStatus).optional(),
 
   externalLinks: z.array(z.string()).optional(),
   customInfo: z.array(z.object({ label: z.string(), value: z.string() })).optional(),
@@ -302,14 +300,12 @@ interface CaptureFormProps {
     region?: string | null;
     state?: string | null;
     country?: string | null;
-    category?: string | null;
     bestSeason?: string | null;
     whySaved?: string | null;
     expeditionDreams?: string | null;
     futureIdeas?: string | null;
     emotionalNotes?: string | null;
     comparisons?: string | null;
-    explorationStatus?: string | null;
     media?: MediaItem[];
     externalLinks?: string[];
     customInfo?: unknown;
@@ -326,6 +322,18 @@ export function CaptureForm({ initialData, onSuccess, onCancel }: CaptureFormPro
   const [linksList, setLinksList] = React.useState<string[]>(initialData?.externalLinks || []);
   const [customInfoList, setCustomInfoList] = React.useState<Array<{ label: string; value: string }>>(Array.isArray(initialData?.customInfo) ? (initialData.customInfo as Array<{ label: string; value: string }>) : []);
   const [newLink, setNewLink] = React.useState('');
+  const [isAutofilling, setIsAutofilling] = React.useState(false);
+  const [autofillModal, setAutofillModal] = React.useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    type: 'success' | 'error' | 'info';
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    type: 'info',
+  });
 
   const form = useForm<DiscoveryFormValues>({
     resolver: zodResolver(discoverySchema) as unknown as import('react-hook-form').Resolver<DiscoveryFormValues>,
@@ -338,9 +346,7 @@ export function CaptureForm({ initialData, onSuccess, onCancel }: CaptureFormPro
       region: '',
       state: '',
       country: '',
-      category: TerrainCategory.SUMMIT,
       bestSeason: '',
-      explorationStatus: ExplorationStatus.RESEARCHING,
     },
   });
 
@@ -355,14 +361,12 @@ export function CaptureForm({ initialData, onSuccess, onCancel }: CaptureFormPro
         region: initialData.region || '',
         state: initialData.state || '',
         country: initialData.country || '',
-        category: (initialData.category as TerrainCategory) || TerrainCategory.SUMMIT,
         bestSeason: initialData.bestSeason || '',
         whySaved: initialData.whySaved || '',
         expeditionDreams: initialData.expeditionDreams || '',
         futureIdeas: initialData.futureIdeas || '',
         emotionalNotes: initialData.emotionalNotes || '',
         comparisons: initialData.comparisons || '',
-        explorationStatus: (initialData.explorationStatus as ExplorationStatus) || ExplorationStatus.RESEARCHING,
       });
     }
   }, [initialData, form]);
@@ -396,6 +400,81 @@ export function CaptureForm({ initialData, onSuccess, onCancel }: CaptureFormPro
     setCustomInfoList(customInfoList.filter((_, i) => i !== index));
   };
 
+  const triggerReverseGeocoding = async (lat: number, lon: number) => {
+    setIsAutofilling(true);
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10`, {
+        headers: {
+          'Accept-Language': 'en',
+          'User-Agent': 'TerrainVault/1.0',
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.address) {
+          const addr = data.address;
+          const country = addr.country || '';
+          const state = addr.state || addr.province || addr.region || '';
+          const region = addr.county || addr.suburb || addr.city || addr.municipality || '';
+          
+          let filledAny = false;
+          if (country && !form.getValues('country')) {
+            form.setValue('country', country, { shouldValidate: true });
+            filledAny = true;
+          }
+          if (state && !form.getValues('state')) {
+            form.setValue('state', state, { shouldValidate: true });
+            filledAny = true;
+          }
+          if (region && !form.getValues('region')) {
+            form.setValue('region', region, { shouldValidate: true });
+            filledAny = true;
+          }
+
+          if (filledAny) {
+            setAutofillModal({
+              isOpen: true,
+              title: 'Autofill Success',
+              description: `Location details successfully retrieved:\n• Country: ${country || 'N/A'}\n• State: ${state || 'N/A'}\n• Region: ${region || 'N/A'}`,
+              type: 'success',
+            });
+          } else {
+            setAutofillModal({
+              isOpen: true,
+              title: 'No New Information',
+              description: 'Coordinates resolved, but the fields (Country, State, Region) are already populated or have no new details.',
+              type: 'info',
+            });
+          }
+        } else {
+          setAutofillModal({
+            isOpen: true,
+            title: 'No Location Found',
+            description: 'Could not find any location details for the specified coordinates.',
+            type: 'error',
+          });
+        }
+      } else {
+        setAutofillModal({
+          isOpen: true,
+          title: 'Autofill Error',
+          description: 'Failed to retrieve location details from reverse geocoding service.',
+          type: 'error',
+        });
+      }
+    } catch (err) {
+      console.error('Reverse geocoding error:', err);
+      setAutofillModal({
+        isOpen: true,
+        title: 'Network Error',
+        description: 'A network error occurred while resolving coordinates. Please try again later.',
+        type: 'error',
+      });
+    } finally {
+      setIsAutofilling(false);
+    }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -413,6 +492,57 @@ export function CaptureForm({ initialData, onSuccess, onCancel }: CaptureFormPro
       } else if (file.name.endsWith('.gpx')) {
         fileType = FileType.GPX;
         folder = 'gpx';
+
+        // Direct GPX extraction: parse coordinate data client-side immediately
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const text = event.target?.result as string;
+          if (text) {
+            try {
+              const parser = new DOMParser();
+              const xml = parser.parseFromString(text, 'text/xml');
+              const gpxName = xml.getElementsByTagName('name')[0]?.textContent;
+              if (gpxName && !form.getValues('name')) {
+                form.setValue('name', gpxName.trim(), { shouldValidate: true });
+              }
+
+              const trkpts = xml.getElementsByTagName('trkpt');
+              if (trkpts.length > 0) {
+                let maxEle = -Infinity;
+                let sumLat = 0;
+                let sumLon = 0;
+                for (let i = 0; i < trkpts.length; i++) {
+                  const pt = trkpts[i];
+                  const lat = parseFloat(pt.getAttribute('lat') || '0');
+                  const lon = parseFloat(pt.getAttribute('lon') || '0');
+                  const eleNode = pt.getElementsByTagName('ele')[0];
+                  const ele = eleNode ? parseFloat(eleNode.textContent || '0') : 0;
+                  if (ele > maxEle) maxEle = ele;
+                  sumLat += lat;
+                  sumLon += lon;
+                }
+                const startPt = trkpts[0];
+                const startLat = parseFloat(startPt.getAttribute('lat') || '0');
+                const startLon = parseFloat(startPt.getAttribute('lon') || '0');
+
+                if (startLat && !form.getValues('latitude')) {
+                  form.setValue('latitude', parseFloat(startLat.toFixed(6)), { shouldValidate: true });
+                }
+                if (startLon && !form.getValues('longitude')) {
+                  form.setValue('longitude', parseFloat(startLon.toFixed(6)), { shouldValidate: true });
+                }
+                if (maxEle > -Infinity && !form.getValues('elevation')) {
+                  form.setValue('elevation', Math.round(maxEle), { shouldValidate: true });
+                }
+
+                triggerReverseGeocoding(startLat, startLon);
+              }
+            } catch (err) {
+              console.error('GPX extraction error:', err);
+            }
+          }
+        };
+        reader.readAsText(file);
       }
 
       // Direct server-backed upload to bypass Cloudflare R2 CORS restrictions
@@ -435,11 +565,17 @@ export function CaptureForm({ initialData, onSuccess, onCancel }: CaptureFormPro
       setMediaList([...mediaList, { name: name || file.name, fileType, url, key, size: size || file.size, mimeType: mimeType || file.type }]);
     } catch (error) {
       console.error('Upload error:', error);
-      alert('File upload failed. Check console for details.');
+      setAutofillModal({
+        isOpen: true,
+        title: 'Upload Failed',
+        description: 'File upload failed. Check console for details.',
+        type: 'error',
+      });
     } finally {
       setUploadingMedia(false);
     }
   };
+
 
   const onSubmit = async (values: DiscoveryFormValues) => {
     setIsSubmitting(true);
@@ -448,7 +584,7 @@ export function CaptureForm({ initialData, onSuccess, onCancel }: CaptureFormPro
         ...values,
         externalLinks: linksList,
         customInfo: customInfoList.filter((item) => item.label.trim() !== ''),
-        media: initialData ? undefined : mediaList, // On update, media is managed separately or added
+        media: mediaList,
       };
 
       let result;
@@ -461,7 +597,12 @@ export function CaptureForm({ initialData, onSuccess, onCancel }: CaptureFormPro
       onSuccess(result);
     } catch (error) {
       console.error('Submission error:', error);
-      alert('Failed to save discovery.');
+      setAutofillModal({
+        isOpen: true,
+        title: 'Save Failed',
+        description: 'Failed to save mountain discovery record. Please check your network and try again.',
+        type: 'error',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -469,7 +610,12 @@ export function CaptureForm({ initialData, onSuccess, onCancel }: CaptureFormPro
 
   const onError = (errors: unknown) => {
     console.error('Form validation errors:', errors);
-    alert('Please fill in all required fields (Name, State).');
+    setAutofillModal({
+      isOpen: true,
+      title: 'Validation Errors',
+      description: 'Please fill in all required fields: Name and State must be selected.',
+      type: 'error',
+    });
   };
 
   return (
@@ -543,20 +689,35 @@ export function CaptureForm({ initialData, onSuccess, onCancel }: CaptureFormPro
           </div>
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-bold text-zinc-700">Terrain Category <span className="text-red-600">*</span></label>
-          <Select onValueChange={(val) => form.setValue('category', val as TerrainCategory)} defaultValue={form.getValues('category')}>
-            <SelectTrigger className="rounded-xl border-zinc-200 font-medium">
-              <SelectValue placeholder="Select category" />
-            </SelectTrigger>
-            <SelectContent className="rounded-xl border-zinc-200">
-              {Object.values(TerrainCategory).map((cat) => (
-                <SelectItem key={cat} value={cat} className="text-xs font-medium">
-                  {cat}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex justify-start">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isAutofilling}
+            onClick={() => {
+              const lat = parseFloat(form.getValues('latitude') as unknown as string);
+              const lon = parseFloat(form.getValues('longitude') as unknown as string);
+              if (!isNaN(lat) && !isNaN(lon)) {
+                triggerReverseGeocoding(lat, lon);
+              } else {
+                setAutofillModal({
+                  isOpen: true,
+                  title: 'Coordinates Missing',
+                  description: 'Please enter valid Latitude and Longitude first to autofill location details.',
+                  type: 'error',
+                });
+              }
+            }}
+            className="rounded-xl font-bold text-xs h-9 px-4 border-zinc-200 text-sky-600 hover:bg-sky-50 hover:text-sky-700"
+          >
+            {isAutofilling ? (
+              <Loader2 className="size-3.5 mr-1.5 animate-spin text-sky-500" />
+            ) : (
+              <MapPin className="size-3.5 mr-1.5" />
+            )}
+            {isAutofilling ? 'Fetching details...' : 'Autofill Location from Coordinates'}
+          </Button>
         </div>
       </div>
 
@@ -639,17 +800,42 @@ export function CaptureForm({ initialData, onSuccess, onCancel }: CaptureFormPro
           </div>
 
           {mediaList.length > 0 && (
-            <div className="mt-4 space-y-2">
-              <div className="text-xs font-semibold text-zinc-600">Attached Media ({mediaList.length})</div>
-              <div className="grid grid-cols-2 gap-2">
+            <div className="mt-4 space-y-3">
+              <div className="text-xs font-bold text-zinc-600 uppercase tracking-wider">Attached Media ({mediaList.length})</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {mediaList.map((m, i) => (
-                  <div key={i} className="flex items-center justify-between p-2.5 bg-zinc-50 rounded-xl border border-zinc-200 text-xs">
-                    <div className="truncate font-medium text-zinc-800 pr-2">
-                      <span className="font-bold mr-1">[{m.fileType}]</span> {m.name}
+                  <div key={i} className="flex flex-col gap-2 p-3 bg-zinc-50 rounded-2xl border border-zinc-200 text-xs relative group transition-all hover:shadow-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="truncate font-bold text-zinc-800 flex items-center gap-1.5" title={m.name}>
+                        <span className="text-[10px] bg-zinc-200 text-zinc-700 px-2 py-0.5 rounded-md font-sans uppercase font-extrabold">{m.fileType}</span>
+                        <span className="truncate">{m.name}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setMediaList(mediaList.filter((_, idx) => idx !== i))}
+                        className="text-zinc-400 hover:text-red-600 p-1 rounded-lg hover:bg-red-50 transition-colors"
+                        title="Delete media"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
                     </div>
-                    <button type="button" onClick={() => setMediaList(mediaList.filter((_, idx) => idx !== i))} className="text-red-800 hover:text-red-950 p-1">
-                      <Trash2 className="size-3.5" />
-                    </button>
+                    {m.fileType === FileType.IMAGE && m.url && (
+                      <div className="relative w-full h-36 rounded-xl overflow-hidden border border-zinc-200 bg-white">
+                        <Image
+                          src={m.key ? `/api/media?key=${encodeURIComponent(m.key)}` : m.url}
+                          alt={m.name}
+                          className="w-full h-full object-cover"
+                        />
+                        <a
+                          href={m.key ? `/api/media?key=${encodeURIComponent(m.key)}` : m.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white font-extrabold tracking-wide transition-opacity duration-200 cursor-pointer text-xs"
+                        >
+                          View Full Image ↗
+                        </a>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -693,6 +879,29 @@ export function CaptureForm({ initialData, onSuccess, onCancel }: CaptureFormPro
           {initialData ? 'Update Discovery' : 'Commit to Terrain Vault'}
         </Button>
       </div>
+
+      <Dialog open={autofillModal.isOpen} onOpenChange={(open) => setAutofillModal((prev) => ({ ...prev, isOpen: open }))}>
+        <DialogContent className="max-w-md bg-white border border-zinc-200 shadow-2xl rounded-3xl p-6 text-zinc-900 font-sans">
+          <DialogHeader className="space-y-2">
+            <DialogTitle className="text-xl font-bold font-serif text-zinc-950 flex items-center gap-2">
+              <MapPin className={`size-5 ${autofillModal.type === 'success' ? 'text-emerald-500' : autofillModal.type === 'error' ? 'text-red-500' : 'text-sky-500'}`} />
+              <span>{autofillModal.title}</span>
+            </DialogTitle>
+            <DialogDescription className="text-sm text-zinc-600 whitespace-pre-line leading-relaxed font-medium">
+              {autofillModal.description}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-6 flex justify-end">
+            <Button
+              type="button"
+              onClick={() => setAutofillModal((prev) => ({ ...prev, isOpen: false }))}
+              className="rounded-xl text-xs font-bold px-5 py-2 bg-zinc-900 hover:bg-zinc-800 text-white shadow-md"
+            >
+              Okay
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </form>
   );
 }

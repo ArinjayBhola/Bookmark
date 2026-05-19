@@ -2,26 +2,6 @@ import { pgTable, text, doublePrecision, integer, timestamp, boolean, pgEnum, in
 import { relations } from 'drizzle-orm';
 
 // Enums
-export const terrainCategoryEnum = pgEnum('TerrainCategory', [
-  'SUMMIT',
-  'VALLEY',
-  'VILLAGE',
-  'GLACIER',
-  'PASS',
-  'CAMPSITE',
-  'ROUTE',
-  'LAKE',
-]);
-
-export const explorationStatusEnum = pgEnum('ExplorationStatus', [
-  'VISITED',
-  'RESEARCHING',
-  'PLANNED',
-  'DREAM_EXPEDITION',
-  'COMPLETED',
-  'ABANDONED',
-]);
-
 export const difficultyEnum = pgEnum('Difficulty', [
   'EASY',
   'MODERATE',
@@ -55,7 +35,6 @@ export const discoveries = pgTable(
     region: text('region'),
     state: text('state'),
     country: text('country'),
-    category: terrainCategoryEnum('category').default('SUMMIT').notNull(),
 
     // Expedition Data
     routeNotes: text('routeNotes'),
@@ -77,7 +56,6 @@ export const discoveries = pgTable(
     futureIdeas: text('futureIdeas'),
     emotionalNotes: text('emotionalNotes'),
     comparisons: text('comparisons'),
-    explorationStatus: explorationStatusEnum('explorationStatus').default('RESEARCHING').notNull(),
 
     // External Links & Custom Info
     externalLinks: text('externalLinks').array().notNull().default([]),
@@ -85,8 +63,6 @@ export const discoveries = pgTable(
   },
   (table) => [
     index('Discovery_latitude_longitude_idx').on(table.latitude, table.longitude),
-    index('Discovery_category_idx').on(table.category),
-    index('Discovery_explorationStatus_idx').on(table.explorationStatus),
     index('Discovery_region_idx').on(table.region),
     index('Discovery_createdAt_idx').on(table.createdAt),
   ]
@@ -153,10 +129,29 @@ export const journalEntries = pgTable(
   ]
 );
 
+export const expeditionGear = pgTable(
+  'ExpeditionGear',
+  {
+    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    createdAt: timestamp('createdAt', { precision: 3, mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updatedAt', { precision: 3, mode: 'date' }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+
+    itemName: text('itemName').notNull(),
+    category: text('category').notNull(), // e.g. Apparel, Climbing Gear, Navigation, Camp & Kitchen
+    packed: boolean('packed').default(false).notNull(),
+
+    discoveryId: text('discoveryId').notNull().references(() => discoveries.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    index('ExpeditionGear_discoveryId_idx').on(table.discoveryId),
+  ]
+);
+
 // Relations
 export const discoveriesRelations = relations(discoveries, ({ many }) => ({
   media: many(media),
   journalEntries: many(journalEntries),
+  expeditionGear: many(expeditionGear),
 }));
 
 export const mediaRelations = relations(media, ({ one }) => ({
@@ -180,3 +175,11 @@ export const journalEntriesRelations = relations(journalEntries, ({ one }) => ({
     references: [discoveries.id],
   }),
 }));
+
+export const expeditionGearRelations = relations(expeditionGear, ({ one }) => ({
+  discovery: one(discoveries, {
+    fields: [expeditionGear.discoveryId],
+    references: [discoveries.id],
+  }),
+}));
+

@@ -96,11 +96,13 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto relative bg-[#fafafa]">
         {React.Children.map(children, (child) => {
           if (React.isValidElement(child)) {
-            return React.cloneElement(child as React.ReactElement<{ onSelectDiscovery?: (id: string) => void }>, { onSelectDiscovery: handleSelectDiscovery });
+            return React.cloneElement(child as React.ReactElement<{ onSelectDiscovery?: (id: string) => void; activeDossierId?: string | null }>, {
+              onSelectDiscovery: handleSelectDiscovery,
+              activeDossierId: selectedDossierId,
+            });
           }
           return child;
         })}

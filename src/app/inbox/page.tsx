@@ -1,5 +1,6 @@
-import { redirect } from 'next/navigation';
+import { DiscoveryInbox } from '@/components/inbox/discovery-inbox';
 
 export default function InboxPage() {
-  redirect('/');
+  return <DiscoveryInbox />;
 }
+

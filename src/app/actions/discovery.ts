@@ -2,29 +2,19 @@
 
 import { db } from '@/db';
 import { discoveries, media, journalEntries } from '@/db/schema';
-import { TerrainCategory, ExplorationStatus, Difficulty, FileType } from '@/db/enums';
+import { Difficulty, FileType } from '@/db/enums';
 import { eq, and, or, ilike, gte, lte, desc } from 'drizzle-orm';
 import { revalidatePath, revalidateTag, unstable_cache } from 'next/cache';
 
 export interface GetDiscoveriesParams {
-  category?: TerrainCategory | 'ALL';
-  status?: ExplorationStatus | 'ALL';
   region?: string;
   search?: string;
   bounds?: { _sw: { lat: number; lng: number }; _ne: { lat: number; lng: number } };
 }
 
 const getDiscoveriesCached = unstable_cache(
-  async (category: string, status: string, region: string, search: string, boundsStr: string) => {
+  async (region: string, search: string, boundsStr: string) => {
     const conditions = [];
-
-    if (category && category !== 'ALL') {
-      conditions.push(eq(discoveries.category, category as TerrainCategory));
-    }
-
-    if (status && status !== 'ALL') {
-      conditions.push(eq(discoveries.explorationStatus, status as ExplorationStatus));
-    }
 
     if (region && region !== 'ALL') {
       conditions.push(eq(discoveries.region, region));
@@ -70,10 +60,10 @@ const getDiscoveriesCached = unstable_cache(
 );
 
 export async function getDiscoveries(params: GetDiscoveriesParams = {}) {
-  const { category = 'ALL', status = 'ALL', region = 'ALL', search = '', bounds } = params;
+  const { region = 'ALL', search = '', bounds } = params;
   const boundsStr = bounds ? JSON.stringify(bounds) : 'NONE';
 
-  return await getDiscoveriesCached(category, status, region, search, boundsStr);
+  return await getDiscoveriesCached(region, search, boundsStr);
 }
 
 export async function getDiscoveryById(id: string) {
@@ -109,7 +99,6 @@ export async function createDiscovery(data: {
   region?: string;
   state: string;
   country?: string;
-  category: TerrainCategory;
   routeNotes?: string;
   difficulty?: Difficulty;
   technicality?: string;
@@ -127,7 +116,6 @@ export async function createDiscovery(data: {
   futureIdeas?: string;
   emotionalNotes?: string;
   comparisons?: string;
-  explorationStatus?: ExplorationStatus;
   externalLinks?: string[];
   customInfo?: unknown;
   media?: { name: string; fileType: FileType; url: string; key: string; size: number; mimeType: string }[];
@@ -169,7 +157,6 @@ export async function updateDiscovery(
     region?: string;
     state?: string;
     country?: string;
-    category: TerrainCategory;
     routeNotes?: string;
     difficulty?: Difficulty;
     technicality?: string;
@@ -187,12 +174,32 @@ export async function updateDiscovery(
     futureIdeas?: string;
     emotionalNotes?: string;
     comparisons?: string;
-    explorationStatus?: ExplorationStatus;
     externalLinks?: string[];
     customInfo?: unknown;
+    media?: { name: string; fileType: FileType; url: string; key: string; size: number; mimeType: string }[];
   }>
 ) {
-  await db.update(discoveries).set({ ...data, updatedAt: new Date() }).where(eq(discoveries.id, id));
+  const { media: mediaItems, ...fields } = data;
+
+  await db.update(discoveries).set({ ...fields, updatedAt: new Date() }).where(eq(discoveries.id, id));
+
+  if (mediaItems) {
+    // Sync media list
+    await db.delete(media).where(eq(media.discoveryId, id));
+    if (mediaItems.length > 0) {
+      await db.insert(media).values(
+        mediaItems.map((m) => ({
+          name: m.name,
+          fileType: m.fileType,
+          url: m.url,
+          key: m.key,
+          size: m.size,
+          mimeType: m.mimeType,
+          discoveryId: id,
+        }))
+      );
+    }
+  }
 
   revalidateTag('discoveries', { expire: 0 });
   revalidateTag('discovery-detail', { expire: 0 });
@@ -221,17 +228,14 @@ const getExplorationStatsCached = unstable_cache(
   async () => {
     const allDiscoveries = await db.query.discoveries.findMany({
       columns: {
-        explorationStatus: true,
         region: true,
         altitudeGain: true,
         elevation: true,
-        category: true,
       },
     });
 
-    const statusCounts: Record<ExplorationStatus, number> = {
+    const statusCounts = {
       VISITED: 0,
-      RESEARCHING: 0,
       PLANNED: 0,
       DREAM_EXPEDITION: 0,
       COMPLETED: 0,
@@ -243,9 +247,6 @@ const getExplorationStatsCached = unstable_cache(
     let highestElevation = 0;
 
     allDiscoveries.forEach((d) => {
-      if (d.explorationStatus) {
-        statusCounts[d.explorationStatus] = (statusCounts[d.explorationStatus] || 0) + 1;
-      }
       if (d.region) {
         regionCounts[d.region] = (regionCounts[d.region] || 0) + 1;
       }

@@ -108,13 +108,8 @@ export function CommandPalette({ open, onOpenChange, onOpenQuickAdd, onSelectDis
                             <span>{d.elevation.toLocaleString()}m</span>
                           </>
                         )}
-                        <span>•</span>
-                        <span className="capitalize">{d.category.toLowerCase()}</span>
                       </div>
                     </div>
-                    <span className="text-xs font-mono bg-[#e2dfd5] text-stone-700 px-2 py-0.5 rounded border border-stone-300">
-                      {d.explorationStatus.replace('_', ' ')}
-                    </span>
                   </button>
                 ))}
               </div>

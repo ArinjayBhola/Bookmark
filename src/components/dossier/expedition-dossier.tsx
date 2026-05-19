@@ -4,12 +4,13 @@ import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getDiscoveryById, getDiscoveries, deleteDiscovery } from '@/app/actions/discovery';
 import { SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { GPXViewer } from './gpx-viewer';
 import { MarkdownJournal } from './markdown-journal';
+import { WeatherWidget } from './weather-widget';
+import { GearChecklist } from './gear-checklist';
 import { CaptureForm } from '@/components/capture-form';
 import Image from 'next/image';
 import {
@@ -34,7 +35,6 @@ interface MediaItem {
 interface NearbyItem {
   id: string;
   name: string;
-  category: string;
   elevation?: number | null;
 }
 
@@ -68,7 +68,7 @@ export function ExpeditionDossier({ discoveryId, onClose, onSelectDiscovery }: E
   });
 
   const { data: nearby = [] } = useQuery({
-    queryKey: ['nearby', discovery?.region, discovery?.category],
+    queryKey: ['nearby', discovery?.region],
     queryFn: () =>
       discovery?.region
         ? getDiscoveries({ region: discovery.region })
@@ -133,7 +133,7 @@ export function ExpeditionDossier({ discoveryId, onClose, onSelectDiscovery }: E
             alt={discovery.name}
             fill
             sizes="(max-width: 1024px) 100vw, 768px"
-            className="object-cover opacity-90 transition-transform duration-700 hover:scale-105"
+            className="object-cover opacity-90"
             priority
           />
         ) : (
@@ -142,15 +142,6 @@ export function ExpeditionDossier({ discoveryId, onClose, onSelectDiscovery }: E
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent pointer-events-none" />
-
-        <div className="absolute top-6 left-6 flex gap-2.5 z-10">
-          <Badge variant="terrain" className="backdrop-blur-xl bg-white/90 text-sky-600 border border-zinc-200/50 px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-sm">
-            {discovery.category}
-          </Badge>
-          <Badge variant="status" className="backdrop-blur-xl bg-white/90 text-zinc-700 border border-zinc-200/50 px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-sm">
-            {discovery.explorationStatus.replace('_', ' ')}
-          </Badge>
-        </div>
 
         <div className="absolute top-6 right-12 z-10 flex items-center gap-2">
           <Button size="sm" onClick={() => setIsEditing(true)} className="backdrop-blur-xl bg-white/90 hover:bg-white text-zinc-900 border border-zinc-200 rounded-xl px-4 font-bold shadow-sm text-xs">
@@ -191,8 +182,16 @@ export function ExpeditionDossier({ discoveryId, onClose, onSelectDiscovery }: E
             <div className="text-[11px] text-zinc-500 font-bold uppercase flex items-center gap-1.5 tracking-wider">
               <MapPin className="size-3.5 text-sky-500" /> Region
             </div>
-            <div className="text-sm font-bold text-zinc-900 truncate">{discovery.region || discovery.country || 'Unspecified'}</div>
+            <div className="text-sm font-bold text-zinc-900 truncate">{discovery.region || 'Unspecified'}</div>
           </div>
+          {discovery.country && (
+            <div className="bg-white p-4 rounded-2xl border border-zinc-200 shadow-sm space-y-1">
+              <div className="text-[11px] text-zinc-500 font-bold uppercase flex items-center gap-1.5 tracking-wider">
+                <MapPin className="size-3.5 text-sky-500" /> Country
+              </div>
+              <div className="text-sm font-bold text-zinc-900 truncate">{discovery.country}</div>
+            </div>
+          )}
           {discovery.latitude != null && discovery.longitude != null && (
             <div className="bg-white p-4 rounded-2xl border border-zinc-200 shadow-sm space-y-1">
               <div className="text-[11px] text-zinc-500 font-bold uppercase flex items-center gap-1.5 tracking-wider">
@@ -215,15 +214,22 @@ export function ExpeditionDossier({ discoveryId, onClose, onSelectDiscovery }: E
 
         {/* Main Tabs */}
         <Tabs defaultValue="intelligence" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 bg-zinc-100 border border-zinc-200 rounded-2xl p-1.5 shadow-inner">
-            <TabsTrigger value="intelligence" className="rounded-xl text-xs font-bold py-2 data-[state=active]:bg-white data-[state=active]:text-sky-600 data-[state=active]:shadow-sm">Route & Logistics</TabsTrigger>
-            <TabsTrigger value="journals" className="rounded-xl text-xs font-bold py-2 data-[state=active]:bg-white data-[state=active]:text-sky-600 data-[state=active]:shadow-sm">Field Journals</TabsTrigger>
-            <TabsTrigger value="media" className="rounded-xl text-xs font-bold py-2 data-[state=active]:bg-white data-[state=active]:text-sky-600 data-[state=active]:shadow-sm">Gallery & GPX</TabsTrigger>
-            <TabsTrigger value="personal" className="rounded-xl text-xs font-bold py-2 data-[state=active]:bg-white data-[state=active]:text-sky-600 data-[state=active]:shadow-sm">Personal Notes</TabsTrigger>
+          <TabsList className={`grid w-full bg-zinc-100 border border-zinc-200 rounded-2xl p-1.5 shadow-inner ${discoveryId === '45feaeaf-a30d-4672-aee0-421ed5f0fd94' ? 'grid-cols-4' : 'grid-cols-5'}`}>
+            <TabsTrigger value="intelligence" className="rounded-xl text-xs font-bold py-2 data-[state=active]:bg-white data-[state=active]:text-sky-600 data-[state=active]:shadow-sm">Logistics</TabsTrigger>
+            <TabsTrigger value="journals" className="rounded-xl text-xs font-bold py-2 data-[state=active]:bg-white data-[state=active]:text-sky-600 data-[state=active]:shadow-sm">Journals</TabsTrigger>
+            <TabsTrigger value="gear" className="rounded-xl text-xs font-bold py-2 data-[state=active]:bg-white data-[state=active]:text-sky-600 data-[state=active]:shadow-sm">Packing</TabsTrigger>
+            {discoveryId !== '45feaeaf-a30d-4672-aee0-421ed5f0fd94' && (
+              <TabsTrigger value="media" className="rounded-xl text-xs font-bold py-2 data-[state=active]:bg-white data-[state=active]:text-sky-600 data-[state=active]:shadow-sm">Gallery</TabsTrigger>
+            )}
+            <TabsTrigger value="personal" className="rounded-xl text-xs font-bold py-2 data-[state=active]:bg-white data-[state=active]:text-sky-600 data-[state=active]:shadow-sm">Notes</TabsTrigger>
           </TabsList>
 
           {/* Route & Logistics */}
           <TabsContent value="intelligence" className="space-y-6 pt-6">
+            {discovery.latitude != null && discovery.longitude != null && (
+              <WeatherWidget latitude={discovery.latitude} longitude={discovery.longitude} elevation={discovery.elevation} />
+            )}
+
             {/* Route Notes */}
             <div className="bg-white p-6 rounded-3xl border border-zinc-200 space-y-3 shadow-sm">
               <div className="text-sm font-bold font-serif text-zinc-900 uppercase tracking-wider flex items-center gap-2 border-b border-zinc-100 pb-3">
@@ -257,85 +263,93 @@ export function ExpeditionDossier({ discoveryId, onClose, onSelectDiscovery }: E
             <MarkdownJournal discoveryId={discovery.id} entries={discovery.journalEntries} />
           </TabsContent>
 
+          {/* Gear Packing Checklist */}
+          <TabsContent value="gear" className="pt-6">
+            <GearChecklist discoveryId={discovery.id} category="Equipment" />
+          </TabsContent>
+
+
           {/* Gallery & GPX */}
-          <TabsContent value="media" className="space-y-8 pt-6">
-            {gpxFiles.map((gpx: MediaItem) => (
-              <GPXViewer key={gpx.id} url={gpx.url} name={discovery.name} />
-            ))}
+          {discoveryId !== '45feaeaf-a30d-4672-aee0-421ed5f0fd94' && (
+            <TabsContent value="media" className="space-y-8 pt-6">
+              {gpxFiles.map((gpx: MediaItem) => (
+                <GPXViewer key={gpx.id} url={gpx.url} name={discovery.name} />
+              ))}
 
-            <div className="bg-white p-6 rounded-3xl border border-zinc-200 space-y-4 shadow-sm">
-              <div className="text-sm font-bold font-serif text-zinc-900 uppercase tracking-wider border-b border-zinc-100 pb-3 flex items-center justify-between">
-                <span>Expedition Gallery ({images.length + videos.length})</span>
-                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider bg-zinc-100 px-3 py-1.5 rounded-lg">Cloudflare R2 Storage</span>
-              </div>
-              {images.length === 0 && videos.length === 0 ? (
-                <div className="text-sm text-zinc-500 font-medium py-8 text-center bg-zinc-50 rounded-2xl border border-zinc-100 shadow-inner">
-                  No images or videos uploaded yet. Use Edit Dossier to attach R2 media.
-                </div>
-              ) : (
-                <div className="space-y-6 pt-2">
-                  {videos.length > 0 && (
-                    <div className="space-y-3">
-                      <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
-                        <Activity className="size-3.5 text-sky-500" /> Video Footage & Alpine Clips
-                      </div>
-                      <div className="grid grid-cols-1 gap-4">
-                        {videos.map((vid: MediaItem) => (
-                          <div key={vid.id} className="rounded-2xl overflow-hidden border border-zinc-200 bg-black shadow-md group">
-                            <video src={vid.url} controls className="w-full aspect-video object-contain bg-black" />
-                            <div className="bg-white p-3 text-xs font-bold text-zinc-900 truncate border-t border-zinc-200">
-                              {vid.name}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {images.length > 0 && (
-                    <div className="space-y-3">
-                      <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
-                        <Mountain className="size-3.5 text-sky-500" /> Photographic Archive
-                      </div>
-                      <div className="grid grid-cols-2 gap-6">
-                        {images.map((img: MediaItem) => (
-                          <div key={img.id} className="relative group rounded-2xl overflow-hidden border border-zinc-200 bg-zinc-50 aspect-video shadow-md">
-                            <Image
-                              src={img.url}
-                              alt={img.name}
-                              fill
-                              sizes="(max-width: 768px) 100vw, 33vw"
-                              className="object-cover transition-transform duration-500 group-hover:scale-105"
-                            />
-                            <div className="absolute bottom-0 inset-x-0 bg-white/90 backdrop-blur-md p-3 text-xs font-bold text-zinc-900 truncate border-t border-zinc-200">
-                              {img.name}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {documents.length > 0 && (
               <div className="bg-white p-6 rounded-3xl border border-zinc-200 space-y-4 shadow-sm">
                 <div className="text-sm font-bold font-serif text-zinc-900 uppercase tracking-wider border-b border-zinc-100 pb-3 flex items-center justify-between">
-                  <span>Survey Documents & PDFs ({documents.length})</span>
-                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider bg-zinc-100 px-3 py-1.5 rounded-lg">Encrypted PDF</span>
+                  <span>Expedition Gallery ({images.length + videos.length})</span>
+                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider bg-zinc-100 px-3 py-1.5 rounded-lg">Cloudflare R2 Storage</span>
                 </div>
-                <div className="space-y-3 pt-1">
-                  {documents.map((doc: MediaItem) => (
-                    <a key={doc.id} href={doc.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-4 bg-zinc-50 rounded-2xl border border-zinc-200 text-sm text-zinc-700 hover:border-zinc-300 hover:shadow-sm transition-all">
-                      <span className="truncate font-bold">{doc.name}</span>
-                      <span className="text-[10px] font-bold text-sky-600 bg-sky-50 px-3 py-1.5 rounded-xl border border-sky-100 shadow-sm uppercase tracking-wider">PDF Document</span>
-                    </a>
-                  ))}
-                </div>
+                {images.length === 0 && videos.length === 0 ? (
+                  <div className="text-sm text-zinc-500 font-medium py-8 text-center bg-zinc-50 rounded-2xl border border-zinc-100 shadow-inner">
+                    No images or videos uploaded yet. Use Edit Dossier to attach R2 media.
+                  </div>
+                ) : (
+                  <div className="space-y-6 pt-2">
+                    {videos.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                          <Activity className="size-3.5 text-sky-500" /> Video Footage & Alpine Clips
+                        </div>
+                        <div className="grid grid-cols-1 gap-4">
+                          {videos.map((vid: MediaItem) => (
+                            <div key={vid.id} className="rounded-2xl overflow-hidden border border-zinc-200 bg-black shadow-md group">
+                              <video src={vid.url} controls className="w-full aspect-video object-contain bg-black" />
+                              <div className="bg-white p-3 text-xs font-bold text-zinc-900 truncate border-t border-zinc-200">
+                                {vid.name}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {images.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                          <Mountain className="size-3.5 text-sky-500" /> Photographic Archive
+                        </div>
+                        <div className="grid grid-cols-2 gap-6">
+                          {images.map((img: MediaItem) => (
+                            <div key={img.id} className="relative group rounded-2xl overflow-hidden border border-zinc-200 bg-zinc-50 aspect-video shadow-md">
+                              <Image
+                                src={img.url}
+                                alt={img.name}
+                                fill
+                                sizes="(max-width: 768px) 100vw, 33vw"
+                                className="object-cover transition-transform duration-500 group-hover:scale-105"
+                              />
+                              <div className="absolute bottom-0 inset-x-0 bg-white/90 backdrop-blur-md p-3 text-xs font-bold text-zinc-900 truncate border-t border-zinc-200">
+                                {img.name}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
-          </TabsContent>
+
+              {documents.length > 0 && (
+                <div className="bg-white p-6 rounded-3xl border border-zinc-200 space-y-4 shadow-sm">
+                  <div className="text-sm font-bold font-serif text-zinc-900 uppercase tracking-wider border-b border-zinc-100 pb-3 flex items-center justify-between">
+                    <span>Survey Documents & PDFs ({documents.length})</span>
+                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider bg-zinc-100 px-3 py-1.5 rounded-lg">Encrypted PDF</span>
+                  </div>
+                  <div className="space-y-3 pt-1">
+                    {documents.map((doc: MediaItem) => (
+                      <a key={doc.id} href={doc.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-4 bg-zinc-50 rounded-2xl border border-zinc-200 text-sm text-zinc-700 hover:border-zinc-300 hover:shadow-sm transition-all">
+                        <span className="truncate font-bold">{doc.name}</span>
+                        <span className="text-[10px] font-bold text-sky-600 bg-sky-50 px-3 py-1.5 rounded-xl border border-sky-100 shadow-sm uppercase tracking-wider">PDF Document</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+          )}
 
           {/* Personal Notes */}
           <TabsContent value="personal" className="space-y-6 pt-6">
@@ -371,7 +385,7 @@ export function ExpeditionDossier({ discoveryId, onClose, onSelectDiscovery }: E
                 >
                   <div className="space-y-1.5">
                     <div className="text-base font-bold font-serif text-zinc-900 truncate group-hover:text-sky-600 transition-colors">{n.name}</div>
-                    <div className="text-xs font-medium text-zinc-500 truncate">{n.category} • {n.elevation ? `${n.elevation}m` : 'N/A'}</div>
+                    <div className="text-xs font-medium text-zinc-500 truncate">{n.elevation ? `${n.elevation}m` : 'N/A'}</div>
                   </div>
                   <div className="text-[11px] font-bold text-sky-600 mt-4 flex items-center gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity uppercase tracking-wider">
                     <span>Explore dossier</span> <ChevronRight className="size-4" />

@@ -24,9 +24,7 @@ interface DiscoveryChronologyItem {
   name: string;
   region?: string | null;
   country?: string | null;
-  category: string;
   elevation?: number | null;
-  explorationStatus: string;
   createdAt: Date | string;
   whySaved?: string | null;
   expeditionDreams?: string | null;
@@ -53,14 +51,34 @@ export function ExplorationStats() {
     placeholderData: (previousData) => previousData,
   });
 
+  function getOrdinalSuffix(day: number): string {
+  if (day > 3 && day < 21) return 'th';
+  switch (day % 10) {
+    case 1:  return 'st';
+    case 2:  return 'nd';
+    case 3:  return 'rd';
+    default: return 'th';
+  }
+}
+
+  function formatDate(dateInput: Date | string): string {
+    const date = new Date(dateInput);
+    if (isNaN(date.getTime())) return '';
+    const day = date.getDate();
+    const suffix = getOrdinalSuffix(day);
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const month = months[date.getMonth()];
+    const year = date.getFullYear();
+    return `${day}${suffix} ${month} ${year}`;
+  }
+
   const handleConfirmDelete = async () => {
     if (!deleteConfirmItem) return;
     const { id, name } = deleteConfirmItem;
-
-    // 1. Instantly hide popup
     setDeleteConfirmItem(null);
-
-    // 2. Instantly hide card from UI (optimistic update)
     setOptimisticDeletedIds((prev) => [...prev, id]);
 
     // 3. Background API deletion
@@ -147,8 +165,6 @@ export function ExplorationStats() {
                   </div>
                   <div className="text-xs text-zinc-500 font-medium truncate flex items-center gap-2">
                     <span>{d.region || d.country || 'Unknown Range'}</span>
-                    <span>•</span>
-                    <span className="text-zinc-700">{d.category}</span>
                     {d.whySaved && (
                       <>
                         <span>•</span>
@@ -160,11 +176,12 @@ export function ExplorationStats() {
               </div>
 
               <div className="flex items-center gap-4 shrink-0">
-                {d.elevation && <div className="text-sm font-bold text-zinc-700 bg-white px-3 py-1.5 rounded-lg border border-zinc-200 shadow-xs">{d.elevation.toLocaleString()}m</div>}
-                <div className="text-xs bg-white px-3 py-1.5 rounded-lg border border-zinc-200 text-zinc-600 font-bold shadow-xs">
-                  {d.explorationStatus.replace('_', ' ')}
-                </div>
-                <div className="text-xs text-zinc-400 font-medium mr-2">{new Date(d.createdAt).toLocaleDateString()}</div>
+                {d.elevation && d.elevation > 0 ? (
+                  <div className="text-sm font-bold text-zinc-700 bg-white px-3 py-1.5 rounded-lg border border-zinc-200 shadow-xs">
+                    {d.elevation.toLocaleString()}m
+                  </div>
+                ) : null}
+                <div className="text-xs text-zinc-400 font-medium mr-2">{formatDate(d.createdAt)}</div>
 
                 {/* Actions: Delete Icon */}
                 <div className="flex items-center gap-1.5 border-l border-zinc-200 pl-4">

@@ -1,18 +1,15 @@
 'use client';
 
 import * as React from 'react';
-import Map, { Marker, NavigationControl, ViewStateChangeEvent } from 'react-map-gl/maplibre';
+import Map, { Marker, NavigationControl, ViewStateChangeEvent, Source, Layer } from 'react-map-gl/maplibre';
 import useSupercluster from 'use-supercluster';
-import { Mountain, Tent, Footprints, Waves, Snowflake, MapPin, Compass } from 'lucide-react';
-import { TerrainCategory } from '@/db/enums';
-import 'maplibre-gl/dist/maplibre-gl.css';
-
+import { Mountain, MapPin } from 'lucide-react';
+import { getDiscoveryById } from '@/app/actions/discovery';
+import { useQuery } from '@tanstack/react-query';
 interface DiscoveryMapItem {
   id: string;
   name: string;
-  category: TerrainCategory;
   elevation?: number | null;
-  explorationStatus: string;
   latitude: number;
   longitude: number;
 }
@@ -22,37 +19,14 @@ interface ClusterProperties {
   point_count?: number;
   discoveryId: string;
   name: string;
-  category: TerrainCategory;
   elevation?: number | null;
-  status: string;
 }
 
 interface MapEngineProps {
   discoveries: DiscoveryMapItem[];
+  activeDossierId?: string | null;
   onSelectDiscovery: (id: string) => void;
 }
-
-const CATEGORY_ICONS: Record<TerrainCategory, React.ReactNode> = {
-  SUMMIT: <Mountain className="size-4" />,
-  CAMPSITE: <Tent className="size-4" />,
-  ROUTE: <Footprints className="size-4" />,
-  LAKE: <Waves className="size-4" />,
-  GLACIER: <Snowflake className="size-4" />,
-  PASS: <Compass className="size-4" />,
-  VALLEY: <MapPin className="size-4" />,
-  VILLAGE: <MapPin className="size-4" />,
-};
-
-const CATEGORY_COLORS: Record<TerrainCategory, string> = {
-  SUMMIT: 'bg-zinc-900 text-white border-zinc-700 shadow-zinc-900/20',
-  CAMPSITE: 'bg-amber-100 text-amber-800 border-amber-300 shadow-amber-900/10',
-  ROUTE: 'bg-zinc-100 text-zinc-700 border-zinc-300 shadow-zinc-900/10',
-  LAKE: 'bg-cyan-100 text-cyan-800 border-cyan-300 shadow-cyan-900/10',
-  GLACIER: 'bg-sky-100 text-sky-800 border-sky-300 shadow-sky-900/10',
-  PASS: 'bg-indigo-100 text-indigo-800 border-indigo-300 shadow-indigo-900/10',
-  VALLEY: 'bg-emerald-100 text-emerald-800 border-emerald-300 shadow-emerald-900/10',
-  VILLAGE: 'bg-orange-100 text-orange-800 border-orange-300 shadow-orange-900/10',
-};
 
 const MAP_STYLES = {
   STREET: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
@@ -88,8 +62,83 @@ interface ViewState {
   pitch: number;
 }
 
-export function MapEngine({ discoveries, onSelectDiscovery }: MapEngineProps) {
+export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: MapEngineProps) {
   const mapRef = React.useRef<import('react-map-gl/maplibre').MapRef>(null);
+
+  // GPX Active Dossier Overlay State & Query
+  const [routeLine, setRouteLine] = React.useState<[number, number][] | null>(null);
+
+  const { data: activeDiscovery } = useQuery({
+    queryKey: ['active-dossier-map', activeDossierId],
+    queryFn: () => (activeDossierId ? getDiscoveryById(activeDossierId) : null),
+    enabled: !!activeDossierId,
+  });
+
+  const gpxFiles = React.useMemo(() => {
+    return activeDiscovery?.media?.filter((m) => m.fileType === 'GPX') || [];
+  }, [activeDiscovery]);
+
+  // Synchronously reset routeLine during the render phase when the active dossier changes
+  const [prevActiveDossierId, setPrevActiveDossierId] = React.useState<string | null | undefined>(activeDossierId);
+  if (activeDossierId !== prevActiveDossierId) {
+    setPrevActiveDossierId(activeDossierId);
+    setRouteLine(null);
+  }
+
+  React.useEffect(() => {
+    if (gpxFiles.length === 0) {
+      return;
+    }
+
+    const loadGPXRoute = async () => {
+      try {
+        const file = gpxFiles[0];
+        if (!file.url) return;
+
+        const res = await fetch(file.url);
+        if (!res.ok) throw new Error('GPX fetch failed');
+        const text = await res.text();
+
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(text, 'text/xml');
+        const trkpts = xml.getElementsByTagName('trkpt');
+        const coords: [number, number][] = [];
+
+        for (let i = 0; i < trkpts.length; i++) {
+          const pt = trkpts[i];
+          const lat = parseFloat(pt.getAttribute('lat') || '0');
+          const lon = parseFloat(pt.getAttribute('lon') || '0');
+          if (lat && lon) {
+            coords.push([lon, lat]);
+          }
+        }
+
+        if (coords.length > 0) {
+          setRouteLine(coords);
+
+          // Fit bounds to make the route overlay beautifully centered
+          let minLat = Infinity, maxLat = -Infinity;
+          let minLon = Infinity, maxLon = -Infinity;
+          for (const [lon, lat] of coords) {
+            if (lat < minLat) minLat = lat;
+            if (lat > maxLat) maxLat = lat;
+            if (lon < minLon) minLon = lon;
+            if (lon > maxLon) maxLon = lon;
+          }
+
+          mapRef.current?.fitBounds(
+            [minLon, minLat, maxLon, maxLat],
+            { padding: 80, duration: 1500 }
+          );
+        }
+      } catch (err) {
+        console.error('GPX map overlay parse error:', err);
+        setRouteLine(null);
+      }
+    };
+
+    loadGPXRoute();
+  }, [gpxFiles]);
 
   // 1. Session Storage Initialization
   const [mapMode, setMapMode] = React.useState<'STREET' | 'SATELLITE'>(() => {
@@ -201,9 +250,7 @@ export function MapEngine({ discoveries, onSelectDiscovery }: MapEngineProps) {
         cluster: false,
         discoveryId: d.id,
         name: d.name,
-        category: d.category,
         elevation: d.elevation,
-        status: d.explorationStatus,
       },
       geometry: {
         type: 'Point' as const,
@@ -269,6 +316,36 @@ export function MapEngine({ discoveries, onSelectDiscovery }: MapEngineProps) {
       >
         <NavigationControl position="bottom-right" />
 
+        {/* GPX Route Polyline Overlay */}
+        {routeLine && routeLine.length > 0 && (
+          <Source
+            id="route-polyline"
+            type="geojson"
+            data={{
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'LineString',
+                coordinates: routeLine,
+              },
+            }}
+          >
+            <Layer
+              id="route-line-layer"
+              type="line"
+              layout={{
+                'line-join': 'round',
+                'line-cap': 'round',
+              }}
+              paint={{
+                'line-color': '#0ea5e9',
+                'line-width': 5,
+                'line-opacity': 0.85,
+              }}
+            />
+          </Source>
+        )}
+
         {/* User Actual Geolocation Marker */}
         {userGeolocation && (
           <Marker latitude={userGeolocation.latitude} longitude={userGeolocation.longitude} anchor="bottom">
@@ -332,7 +409,7 @@ export function MapEngine({ discoveries, onSelectDiscovery }: MapEngineProps) {
 
         {clusters.map((cluster) => {
           const [longitude, latitude] = cluster.geometry.coordinates;
-          const { cluster: isCluster, point_count: pointCount, discoveryId, name, category, elevation } = cluster.properties as ClusterProperties;
+          const { cluster: isCluster, point_count: pointCount, discoveryId, name, elevation } = cluster.properties as ClusterProperties;
 
           if (isCluster) {
             return (
@@ -374,9 +451,13 @@ export function MapEngine({ discoveries, onSelectDiscovery }: MapEngineProps) {
 
                 {/* Marker Pin */}
                 <div
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border backdrop-blur-md shadow-md transition-all group-hover:scale-105 group-hover:shadow-lg ${CATEGORY_COLORS[category as TerrainCategory]}`}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border backdrop-blur-md shadow-md transition-all group-hover:scale-105 group-hover:shadow-lg ${
+                    activeDossierId === discoveryId
+                      ? 'bg-zinc-950 text-white border-zinc-900 shadow-zinc-950/20'
+                      : 'bg-white/95 text-zinc-900 border-zinc-200/80 hover:bg-white shadow-zinc-900/10'
+                  }`}
                 >
-                  {CATEGORY_ICONS[category as TerrainCategory]}
+                  <Mountain className="size-4 text-sky-500" />
                   <span className="text-xs font-bold font-sans tracking-tight max-w-[120px] truncate">{name}</span>
                 </div>
                 <div className="w-1 h-2.5 bg-zinc-300 shadow-sm rounded-b-sm" />

@@ -5,8 +5,6 @@ import { DossierPageView } from '@/components/dossier/dossier-page-view';
 interface DiscoveryData {
   id: string;
   name: string;
-  category: string;
-  explorationStatus: string;
   [key: string]: unknown;
 }
 

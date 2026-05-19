@@ -2,7 +2,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
 import { discoveries, media } from './schema';
-import { TerrainCategory, ExplorationStatus, Difficulty, FileType } from './enums';
+import { Difficulty, FileType } from './enums';
 
 const connectionString = process.env.DATABASE_URL || 'postgresql://terrain_explorer:supersecretmountainpassword@localhost:5432/terrain_vault_dev';
 const client = postgres(connectionString, { prepare: false });
@@ -25,7 +25,6 @@ async function main() {
       region: 'Khumbu / Everest',
       state: 'Sagarmatha',
       country: 'Nepal',
-      category: TerrainCategory.GLACIER,
       routeNotes: 'Extremely volatile shifting seracs. Approach requires alpine start before 3 AM to avoid thermal collapse. Ladders maintained by Icefall Doctors.',
       difficulty: Difficulty.EXTREME,
       technicality: 'Grade IV Ice Climbing, Crevasse Navigation',
@@ -40,7 +39,6 @@ async function main() {
       remotenessScore: 6,
       whySaved: 'The ultimate passage to the roof of the world. Essential research for high altitude glacier logistics.',
       expeditionDreams: 'Traverse the Western Cwm in absolute silence during a clear moonlit night.',
-      explorationStatus: ExplorationStatus.RESEARCHING,
       externalLinks: ['https://en.wikipedia.org/wiki/Khumbu_Icefall'],
       mediaItems: [
         {
@@ -62,7 +60,6 @@ async function main() {
       region: 'Karakoram',
       state: 'Gilgit-Baltistan',
       country: 'Pakistan',
-      category: TerrainCategory.GLACIER,
       routeNotes: 'A 16km wide glacial basin at the head of the Biafo and Hispar glaciers. Unearthly isolation. Navigation difficult in whiteout conditions.',
       difficulty: Difficulty.TECHNICAL,
       technicality: 'Roped glacier travel, crevasse rescue proficiency mandatory',
@@ -77,7 +74,6 @@ async function main() {
       remotenessScore: 10,
       whySaved: 'One of the most remote mountain basins on Earth. The Martin Conway descriptions from 1892 are mesmerizing.',
       expeditionDreams: 'Complete the full Biafo-Hispar traverse over Hispar La.',
-      explorationStatus: ExplorationStatus.DREAM_EXPEDITION,
       externalLinks: ['https://en.wikipedia.org/wiki/Snow_Lake_(Pakistan)'],
       mediaItems: [
         {
@@ -99,7 +95,6 @@ async function main() {
       region: 'Annapurna Himal',
       state: 'Gandaki',
       country: 'Nepal',
-      category: TerrainCategory.VALLEY,
       routeNotes: 'Steep gorge entrance through Modi Khola. Massive vertical relief surrounded by 7,000m+ peaks.',
       difficulty: Difficulty.STRENUOUS,
       technicality: 'Steep stone staircases, avalanche chutes across trail near Deurali',
@@ -114,7 +109,6 @@ async function main() {
       remotenessScore: 5,
       whySaved: 'Classic amphitheater of giants. Perfect terrain for testing lightweight expedition gear.',
       expeditionDreams: 'Explore the high ridges above MBC away from the main trekking trail.',
-      explorationStatus: ExplorationStatus.VISITED,
       externalLinks: ['https://en.wikipedia.org/wiki/Annapurna_Sanctuary'],
       mediaItems: [
         {
@@ -136,7 +130,6 @@ async function main() {
       region: 'Manaslu Circuit',
       state: 'Gandaki',
       country: 'Nepal',
-      category: TerrainCategory.PASS,
       routeNotes: 'Long gradual approach past Dharmasala. Steep, icy descent on the Bimtang side requiring microspikes or crampons.',
       difficulty: Difficulty.STRENUOUS,
       technicality: 'High altitude trekking, icy trail conditions',
@@ -151,7 +144,6 @@ async function main() {
       remotenessScore: 7,
       whySaved: 'Spectacular panorama of Cheo Himal, Himlung Himal, and Kang Guru.',
       expeditionDreams: 'Cross the pass during early winter before snow closes the route.',
-      explorationStatus: ExplorationStatus.PLANNED,
       externalLinks: ['https://en.wikipedia.org/wiki/Manaslu'],
       mediaItems: [
         {
@@ -173,7 +165,6 @@ async function main() {
       region: 'Nanga Parbat Himal',
       state: 'Gilgit-Baltistan',
       country: 'Pakistan',
-      category: TerrainCategory.CAMPSITE,
       routeNotes: 'Direct view of the 4,600m high Rupal Face—the highest mountain precipice in the world. Lush green meadows contrasting with immense vertical ice.',
       difficulty: Difficulty.MODERATE,
       technicality: 'Easy trekking approach from Tarashing',
@@ -188,7 +179,6 @@ async function main() {
       remotenessScore: 8,
       whySaved: 'The sheer scale of the Rupal Face defies human imagination. A place for pure contemplation.',
       expeditionDreams: 'Camp at Latobah during the full moon to watch the ice face glow.',
-      explorationStatus: ExplorationStatus.VISITED,
       externalLinks: ['https://en.wikipedia.org/wiki/Nanga_Parbat'],
       mediaItems: [
         {
@@ -210,7 +200,6 @@ async function main() {
       region: 'Khumbu / Everest',
       state: 'Sagarmatha',
       country: 'Nepal',
-      category: TerrainCategory.LAKE,
       routeNotes: 'Ascent of Gokyo Ri provides the most comprehensive view of Everest, Lhotse, Makalu, and Cho Oyu. The turquoise oligotrophic lakes are breathtaking.',
       difficulty: Difficulty.STRENUOUS,
       technicality: 'Steep scree switchbacks on Gokyo Ri',
@@ -225,7 +214,6 @@ async function main() {
       remotenessScore: 6,
       whySaved: 'Far superior panoramic vantage point compared to Kala Patthar. The Ngozumpa Glacier crossing is dramatic.',
       expeditionDreams: 'Cross Renjo La Pass at dawn to see the sun hit Everest across the lake.',
-      explorationStatus: ExplorationStatus.COMPLETED,
       externalLinks: ['https://en.wikipedia.org/wiki/Gokyo_Lakes'],
       mediaItems: [
         {

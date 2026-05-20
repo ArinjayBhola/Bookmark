@@ -179,6 +179,7 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
   const [userGeolocation, setUserGeolocation] = React.useState<{ latitude: number; longitude: number } | null>(null);
   const [copiedPin, setCopiedPin] = React.useState(false);
   const [copiedUserPin, setCopiedUserPin] = React.useState(false);
+  const [is3D, setIs3D] = React.useState(false);
 
   // Track if we restored from session storage so we don't overwrite with initial geolocation flyTo
   const isRestoredSession = React.useRef(false);
@@ -212,6 +213,38 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
       }
     }
   }, [clickedLocation]);
+
+  // Load and apply AWS public Terrarium 3D elevation tiles to Maplibre
+  React.useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+
+    const applyTerrain = () => {
+      if (is3D) {
+        if (!map.getSource('terrain-source')) {
+          map.addSource('terrain-source', {
+            type: 'raster-dem',
+            tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+            encoding: 'terrarium',
+            tileSize: 256,
+          });
+        }
+        map.setTerrain({ source: 'terrain-source', exaggeration: 1.5 });
+      } else {
+        map.setTerrain(null);
+      }
+    };
+
+    if (map.isStyleLoaded()) {
+      applyTerrain();
+    } else {
+      map.on('style.load', applyTerrain);
+    }
+
+    return () => {
+      map.off('style.load', applyTerrain);
+    };
+  }, [is3D, mapMode]);
 
   React.useEffect(() => {
     if ('geolocation' in navigator) {
@@ -296,11 +329,46 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
         >
           🛰️ Satellite
         </button>
+        <div className="w-[1px] h-4 bg-zinc-200 mx-1" />
+        <button
+          type="button"
+          onClick={() => {
+            const new3D = !is3D;
+            setIs3D(new3D);
+            if (new3D) {
+              mapRef.current?.easeTo({
+                pitch: 60,
+                duration: 1000,
+              });
+              setViewState((prev) => ({
+                ...prev,
+                pitch: 60,
+              }));
+            } else {
+              mapRef.current?.easeTo({
+                pitch: 0,
+                duration: 1000,
+              });
+              setViewState((prev) => ({
+                ...prev,
+                pitch: 0,
+              }));
+            }
+          }}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 ${
+            is3D 
+              ? 'bg-sky-600 text-white shadow-md' 
+              : 'text-zinc-600 hover:text-zinc-900'
+          }`}
+        >
+          🏔️ 3D
+        </button>
       </div>
 
       <Map
         ref={mapRef}
         {...viewState}
+        maxPitch={85}
         onMove={(evt: ViewStateChangeEvent) => setViewState(evt.viewState)}
         onLoad={() => {
           if (mapRef.current) {

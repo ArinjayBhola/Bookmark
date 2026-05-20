@@ -10,7 +10,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Latitude and Longitude are required' }, { status: 400 });
     }
 
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true&daily=weathercode,temperature_2m_max,temperature_2m_min,snowfall_sum,wind_speed_10m_max,wind_gusts_10m_max&timezone=auto`;
     const res = await fetch(url);
     
     if (!res.ok) {

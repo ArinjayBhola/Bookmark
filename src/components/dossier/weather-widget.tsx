@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Cloud, Sun, CloudRain, CloudSnow, Wind, Compass, RefreshCw, Thermometer } from 'lucide-react';
+import { Cloud, Sun, CloudRain, CloudSnow, Wind, Compass, RefreshCw, Thermometer, AlertTriangle, ShieldAlert } from 'lucide-react';
 
 interface WeatherWidgetProps {
   latitude: number;
@@ -22,6 +22,9 @@ interface DailyWeather {
   weathercode: number[];
   temperature_2m_max: number[];
   temperature_2m_min: number[];
+  snowfall_sum?: number[];
+  wind_speed_10m_max?: number[];
+  wind_gusts_10m_max?: number[];
 }
 
 export function WeatherWidget({ latitude, longitude, elevation }: WeatherWidgetProps) {
@@ -114,6 +117,78 @@ export function WeatherWidget({ latitude, longitude, elevation }: WeatherWidgetP
     return sectors[index];
   };
 
+  // Alpine Avalanche Risk Assessment (AARA) model
+  const getAvalancheRisk = (snowfall: number, windSpeed: number, maxTemp: number) => {
+    let score = 1; // 1 = Low, 2 = Moderate, 3 = Considerable, 4 = High, 5 = Extreme
+    let reasons: string[] = [];
+
+    if (snowfall >= 30) {
+      score = Math.max(score, 5);
+      reasons.push('Extreme fresh snowfall (>30cm)');
+    } else if (snowfall >= 15) {
+      score = Math.max(score, 4);
+      reasons.push('Heavy fresh snowfall (>15cm)');
+    } else if (snowfall >= 8) {
+      score = Math.max(score, 3);
+      reasons.push('Moderate fresh snowfall (>8cm)');
+    } else if (snowfall >= 3) {
+      score = Math.max(score, 2);
+      reasons.push('Light snowfall');
+    }
+
+    if (windSpeed >= 45) {
+      score = Math.max(score, score >= 3 ? 5 : 4);
+      reasons.push('Gale force winds (>45km/h) creating wind slabs');
+    } else if (windSpeed >= 25) {
+      score = Math.max(score, score >= 2 ? score + 1 : 2);
+      reasons.push('Moderate-to-high winds creating snow drifts');
+    }
+
+    if (maxTemp >= 4 && snowfall > 0) {
+      score = Math.min(5, score + 1);
+      reasons.push('Rapid daytime warming triggering wet loose slides');
+    }
+
+    const levels = [
+      { 
+        level: 'Low', 
+        color: 'text-emerald-700 bg-emerald-50 border-emerald-200', 
+        score: 1, 
+        desc: 'Generally safe climbing conditions. Natural avalanches very unlikely.' 
+      },
+      { 
+        level: 'Moderate', 
+        color: 'text-amber-700 bg-amber-50 border-amber-200', 
+        score: 2, 
+        desc: 'Human-triggered avalanches possible on steep slope terrain. Natural avalanches unlikely.' 
+      },
+      { 
+        level: 'Considerable', 
+        color: 'text-orange-700 bg-orange-50 border-orange-200', 
+        score: 3, 
+        desc: 'Human-triggered slab avalanches likely. Natural avalanches possible. Exercise high caution.' 
+      },
+      { 
+        level: 'High', 
+        color: 'text-rose-700 bg-rose-50 border-rose-200 font-bold', 
+        score: 4, 
+        desc: 'Natural avalanches highly likely. Dangerous slab propagation. Avoid steep alpine aspects.' 
+      },
+      { 
+        level: 'Extreme', 
+        color: 'text-red-700 bg-red-50 border-red-200 font-bold animate-pulse', 
+        score: 5, 
+        desc: 'Widespread natural avalanches certain. Extreme danger. Avoid any travel in avalanche terrain.' 
+      }
+    ];
+
+    const currentRisk = levels[score - 1];
+    return {
+      ...currentRisk,
+      reasons: reasons.length > 0 ? reasons.join(', ') : 'Stable temperature, minimal wind, and no new snowfall.'
+    };
+  };
+
   return (
     <div className="bg-[#fcfbf9] p-6 rounded-3xl border border-zinc-200 shadow-sm space-y-6">
       <div className="flex items-center justify-between border-b border-zinc-150 pb-3">
@@ -154,6 +229,61 @@ export function WeatherWidget({ latitude, longitude, elevation }: WeatherWidgetP
           </div>
         </div>
       </div>
+
+      {/* Avalanche Hazard Advisory */}
+      {daily && (
+        (() => {
+          const snowfall = daily.snowfall_sum?.[0] ?? 0;
+          const windSpeed = daily.wind_speed_10m_max?.[0] ?? current.windspeed ?? 0;
+          const maxTemp = daily.temperature_2m_max?.[0] ?? current.temperature ?? 0;
+          const windGusts = daily.wind_gusts_10m_max?.[0] ?? 0;
+          
+          const risk = getAvalancheRisk(snowfall, windSpeed, maxTemp);
+
+          return (
+            <div className={`p-4 rounded-2xl border ${risk.color} flex flex-col gap-2 shadow-3xs`}>
+              <div className="flex items-center justify-between border-b border-current/10 pb-1.5">
+                <div className="flex items-center gap-1.5">
+                  <ShieldAlert className="size-4 shrink-0" />
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider">Avalanche Advisory</span>
+                </div>
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full font-extrabold uppercase border border-current">
+                  Level {risk.score} / 5
+                </span>
+              </div>
+
+              <div className="space-y-1">
+                <div className="text-xs font-extrabold flex items-center gap-1">
+                  <AlertTriangle className="size-3.5 shrink-0" />
+                  Risk Level: {risk.level}
+                </div>
+                <p className="text-[10px] leading-relaxed opacity-95 font-medium">
+                  {risk.desc}
+                </p>
+                <div className="text-[9px] opacity-80 font-bold">
+                  Key Concerns: <span className="font-medium italic">{risk.reasons}</span>
+                </div>
+              </div>
+
+              {/* Telemetry sub-grid */}
+              <div className="grid grid-cols-3 gap-2 mt-1 pt-1.5 border-t border-current/10 text-[9px] font-extrabold">
+                <div>
+                  <span className="opacity-75 block text-[8px] uppercase tracking-wider">Daily Snowfall</span>
+                  <span>{snowfall.toFixed(1)} cm</span>
+                </div>
+                <div>
+                  <span className="opacity-75 block text-[8px] uppercase tracking-wider">Peak Gusts</span>
+                  <span>{windGusts.toFixed(1)} km/h</span>
+                </div>
+                <div>
+                  <span className="opacity-75 block text-[8px] uppercase tracking-wider">Max Temp</span>
+                  <span>{maxTemp.toFixed(1)}°C</span>
+                </div>
+              </div>
+            </div>
+          );
+        })()
+      )}
 
       {/* 3-Day Outline Forecast */}
       {daily && daily.time && (

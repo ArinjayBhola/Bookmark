@@ -6,6 +6,7 @@ import useSupercluster from 'use-supercluster';
 import { Mountain, MapPin } from 'lucide-react';
 import { getDiscoveryById } from '@/app/actions/discovery';
 import { useQuery } from '@tanstack/react-query';
+import 'maplibre-gl/dist/maplibre-gl.css';
 interface DiscoveryMapItem {
   id: string;
   name: string;
@@ -301,6 +302,18 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
         ref={mapRef}
         {...viewState}
         onMove={(evt: ViewStateChangeEvent) => setViewState(evt.viewState)}
+        onLoad={() => {
+          if (mapRef.current) {
+            const mapBounds = mapRef.current.getMap().getBounds();
+            setBounds([mapBounds.getWest(), mapBounds.getSouth(), mapBounds.getEast(), mapBounds.getNorth()]);
+          }
+        }}
+        onResize={() => {
+          if (mapRef.current) {
+            const mapBounds = mapRef.current.getMap().getBounds();
+            setBounds([mapBounds.getWest(), mapBounds.getSouth(), mapBounds.getEast(), mapBounds.getNorth()]);
+          }
+        }}
         onClick={(evt) => {
           if (evt.lngLat) {
             setClickedLocation({

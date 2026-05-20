@@ -83,32 +83,13 @@ export const media = pgTable(
     mimeType: text('mimeType').notNull(),
 
     discoveryId: text('discoveryId').references(() => discoveries.id, { onDelete: 'cascade' }),
-    inboxItemId: text('inboxItemId').references(() => inboxItems.id, { onDelete: 'set null' }),
   },
   (table) => [
     index('Media_discoveryId_idx').on(table.discoveryId),
-    index('Media_inboxItemId_idx').on(table.inboxItemId),
     index('Media_fileType_idx').on(table.fileType),
   ]
 );
 
-export const inboxItems = pgTable(
-  'InboxItem',
-  {
-    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-    createdAt: timestamp('createdAt', { precision: 3, mode: 'date' }).defaultNow().notNull(),
-    updatedAt: timestamp('updatedAt', { precision: 3, mode: 'date' }).defaultNow().notNull().$onUpdateFn(() => new Date()),
-
-    title: text('title'),
-    rawNotes: text('rawNotes'),
-    urlDump: text('urlDump'),
-    processed: boolean('processed').default(false).notNull(),
-  },
-  (table) => [
-    index('InboxItem_processed_idx').on(table.processed),
-    index('InboxItem_createdAt_idx').on(table.createdAt),
-  ]
-);
 
 export const journalEntries = pgTable(
   'JournalEntry',
@@ -159,14 +140,6 @@ export const mediaRelations = relations(media, ({ one }) => ({
     fields: [media.discoveryId],
     references: [discoveries.id],
   }),
-  inboxItem: one(inboxItems, {
-    fields: [media.inboxItemId],
-    references: [inboxItems.id],
-  }),
-}));
-
-export const inboxItemsRelations = relations(inboxItems, ({ many }) => ({
-  media: many(media),
 }));
 
 export const journalEntriesRelations = relations(journalEntries, ({ one }) => ({

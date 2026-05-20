@@ -3,10 +3,10 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, Compass, ExternalLink, ChevronRight, Edit3, Trash2, Play, Copy } from 'lucide-react';
+import { MapPin, Compass, ExternalLink, ChevronRight, Edit3, Trash2, Play, Copy, Cloud } from 'lucide-react';
 import { GPXViewer } from '@/components/dossier/gpx-viewer';
+import { WeatherWidget } from './weather-widget';
 import Image from 'next/image';
 import { CaptureForm } from '@/components/capture-form';
 import { deleteDiscovery } from '@/app/actions/discovery';
@@ -252,6 +252,18 @@ export function DossierPageView({ initialDiscovery }: DossierPageViewProps) {
                 </button>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Weather Telemetry */}
+      {discovery.latitude != null && discovery.longitude != null && (
+        <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm space-y-4">
+          <div className="text-sm font-bold font-serif text-zinc-900 uppercase tracking-wider flex items-center gap-2 border-b border-zinc-100 pb-4">
+            <Cloud className="size-5 text-sky-500" /> Live Alpine Conditions & Weather Telemetry
+          </div>
+          <div className="max-w-3xl">
+            <WeatherWidget latitude={discovery.latitude} longitude={discovery.longitude} elevation={discovery.elevation} />
           </div>
         </div>
       )}

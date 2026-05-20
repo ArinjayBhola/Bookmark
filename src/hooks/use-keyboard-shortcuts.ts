@@ -38,6 +38,8 @@ export function useKeyboardShortcuts({ onToggleCommandPalette, onToggleQuickAdd 
       }
 
 
+
+
     };
 
     window.addEventListener('keydown', handleKeyDown);

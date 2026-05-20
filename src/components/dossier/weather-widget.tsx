@@ -34,7 +34,7 @@ export function WeatherWidget({ latitude, longitude, elevation }: WeatherWidgetP
     setLoading(true);
     setError(null);
     try {
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto`;
+      const url = `/api/weather?latitude=${latitude}&longitude=${longitude}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error('Failed to fetch weather telemetry');
       const data = await res.json();
@@ -52,7 +52,7 @@ export function WeatherWidget({ latitude, longitude, elevation }: WeatherWidgetP
     let active = true;
     const loadWeather = async () => {
       try {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto`;
+        const url = `/api/weather?latitude=${latitude}&longitude=${longitude}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error('Failed to fetch weather telemetry');
         const data = await res.json();

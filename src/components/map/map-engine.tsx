@@ -40,7 +40,21 @@ const MAP_STYLES = {
           'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
         ],
         tileSize: 256,
-        attribution: 'Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+        attribution: 'Tiles © Esri'
+      },
+      'esri-reference': {
+        type: 'raster',
+        tiles: [
+          'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'
+        ],
+        tileSize: 256
+      },
+      'esri-transportation': {
+        type: 'raster',
+        tiles: [
+          'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}'
+        ],
+        tileSize: 256
       }
     },
     layers: [
@@ -48,6 +62,20 @@ const MAP_STYLES = {
         id: 'satellite',
         type: 'raster',
         source: 'esri-satellite',
+        minzoom: 0,
+        maxzoom: 18
+      },
+      {
+        id: 'transportation',
+        type: 'raster',
+        source: 'esri-transportation',
+        minzoom: 0,
+        maxzoom: 18
+      },
+      {
+        id: 'reference',
+        type: 'raster',
+        source: 'esri-reference',
         minzoom: 0,
         maxzoom: 18
       }
@@ -230,8 +258,26 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
           });
         }
         map.setTerrain({ source: 'terrain-source', exaggeration: 1.5 });
+
+        // Add Hillshade layer if not exists
+        if (!map.getLayer('hillshade-layer')) {
+          const firstSymbolId = map.getStyle().layers.find((layer: any) => layer.type === 'symbol' || layer.id === 'reference' || layer.id === 'transportation')?.id;
+          map.addLayer({
+            id: 'hillshade-layer',
+            type: 'hillshade',
+            source: 'terrain-source',
+            paint: {
+              'hillshade-shadow-color': '#0f172a',
+              'hillshade-highlight-color': '#ffffff',
+              'hillshade-exaggeration': 0.8
+            }
+          }, firstSymbolId);
+        }
+
+
       } else {
         map.setTerrain(null);
+        if (map.getLayer('hillshade-layer')) map.removeLayer('hillshade-layer');
       }
     };
 

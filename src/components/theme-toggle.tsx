@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { Monitor, Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 
 type ThemeMode = 'light' | 'dark' | 'system';
 const THEME_STORAGE_KEY = 'terrain-vault-theme';
@@ -48,30 +49,56 @@ export function ThemeToggle() {
     return () => media.removeEventListener('change', listener);
   }, [mode]);
 
-  const nextMode: Record<ThemeMode, ThemeMode> = {
-    light: 'dark',
-    dark: 'system',
-    system: 'light',
-  };
-
   const Icon = mode === 'light' ? Sun : mode === 'dark' ? Moon : Monitor;
 
+  const handleSelect = (next: ThemeMode) => {
+    window.localStorage.setItem(THEME_STORAGE_KEY, next);
+    applyTheme(next);
+    window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
+  };
+
   return (
-    <Button
-      type="button"
-      variant="outline"
-      size="icon"
-      aria-label={`Theme: ${mode}. Change theme`}
-      title={`Theme: ${mode}`}
-      onClick={() => {
-        const next = nextMode[mode];
-        window.localStorage.setItem(THEME_STORAGE_KEY, next);
-        applyTheme(next);
-        window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
-      }}
-      className="shrink-0"
-    >
-      <Icon className="size-4" />
-    </Button>
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label={`Theme: ${mode}. Change theme`}
+          title={`Theme: ${mode}`}
+          className="shrink-0"
+        >
+          <Icon className="size-4" />
+        </Button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="end"
+          className="z-50 min-w-[8rem] overflow-hidden rounded-[var(--radius-md)] border bg-[var(--surface)] p-1 text-[var(--foreground)] shadow-[var(--shadow-popover)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2"
+        >
+          <DropdownMenu.Item
+            className="relative flex cursor-default select-none items-center rounded-[var(--radius-sm)] px-2 py-1.5 text-sm outline-none transition-colors focus:bg-[var(--surface-muted)] focus:text-[var(--foreground)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+            onClick={() => handleSelect('light')}
+          >
+            <Sun className="mr-2 size-4" />
+            <span>Light</span>
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            className="relative flex cursor-default select-none items-center rounded-[var(--radius-sm)] px-2 py-1.5 text-sm outline-none transition-colors focus:bg-[var(--surface-muted)] focus:text-[var(--foreground)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+            onClick={() => handleSelect('dark')}
+          >
+            <Moon className="mr-2 size-4" />
+            <span>Dark</span>
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            className="relative flex cursor-default select-none items-center rounded-[var(--radius-sm)] px-2 py-1.5 text-sm outline-none transition-colors focus:bg-[var(--surface-muted)] focus:text-[var(--foreground)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+            onClick={() => handleSelect('system')}
+          >
+            <Monitor className="mr-2 size-4" />
+            <span>System</span>
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }

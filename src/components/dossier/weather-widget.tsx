@@ -120,7 +120,7 @@ export function WeatherWidget({ latitude, longitude, elevation }: WeatherWidgetP
   // Alpine Avalanche Risk Assessment (AARA) model
   const getAvalancheRisk = (snowfall: number, windSpeed: number, maxTemp: number) => {
     let score = 1; // 1 = Low, 2 = Moderate, 3 = Considerable, 4 = High, 5 = Extreme
-    let reasons: string[] = [];
+    const reasons: string[] = [];
 
     if (snowfall >= 30) {
       score = Math.max(score, 5);

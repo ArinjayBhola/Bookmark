@@ -3,13 +3,55 @@
 import { db } from '@/db';
 import { discoveries, media, journalEntries } from '@/db/schema';
 import { Difficulty, FileType } from '@/db/enums';
-import { eq, and, or, ilike, gte, lte, desc } from 'drizzle-orm';
+import { eq, and, or, ilike, gte, lte, desc, count } from 'drizzle-orm';
 import { revalidatePath, revalidateTag, unstable_cache } from 'next/cache';
 
 export interface GetDiscoveriesParams {
   region?: string;
   search?: string;
   bounds?: { _sw: { lat: number; lng: number }; _ne: { lat: number; lng: number } };
+}
+
+export interface GetDiscoveriesPageParams extends GetDiscoveriesParams {
+  page?: number;
+  pageSize?: number;
+}
+
+function buildDiscoveryConditions({ region = 'ALL', search = '', bounds }: GetDiscoveriesParams) {
+  const conditions = [];
+
+  if (region && region !== 'ALL') {
+    conditions.push(eq(discoveries.region, region));
+  }
+
+  if (search && search.trim() !== '') {
+    const searchTerm = `%${search.trim()}%`;
+    conditions.push(
+      or(
+        ilike(discoveries.name, searchTerm),
+        ilike(discoveries.localName, searchTerm),
+        ilike(discoveries.region, searchTerm),
+        ilike(discoveries.state, searchTerm),
+        ilike(discoveries.country, searchTerm),
+        ilike(discoveries.routeNotes, searchTerm),
+        ilike(discoveries.whySaved, searchTerm),
+        ilike(discoveries.expeditionDreams, searchTerm)
+      )
+    );
+  }
+
+  if (bounds) {
+    conditions.push(
+      and(
+        gte(discoveries.latitude, bounds._sw.lat),
+        lte(discoveries.latitude, bounds._ne.lat),
+        gte(discoveries.longitude, bounds._sw.lng),
+        lte(discoveries.longitude, bounds._ne.lng)
+      )
+    );
+  }
+
+  return conditions.length > 0 ? and(...conditions) : undefined;
 }
 
 const getDiscoveriesCached = unstable_cache(
@@ -64,6 +106,35 @@ export async function getDiscoveries(params: GetDiscoveriesParams = {}) {
   const boundsStr = bounds ? JSON.stringify(bounds) : 'NONE';
 
   return await getDiscoveriesCached(region, search, boundsStr);
+}
+
+export async function getDiscoveriesPage(params: GetDiscoveriesPageParams = {}) {
+  const page = Math.max(1, params.page || 1);
+  const pageSize = Math.min(50, Math.max(5, params.pageSize || 12));
+  const where = buildDiscoveryConditions(params);
+
+  const [items, totalRows] = await Promise.all([
+    db.query.discoveries.findMany({
+      where,
+      with: {
+        media: true,
+      },
+      orderBy: [desc(discoveries.createdAt)],
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+    }),
+    db.select({ value: count() }).from(discoveries).where(where),
+  ]);
+
+  const total = Number(totalRows[0]?.value || 0);
+
+  return {
+    items,
+    total,
+    page,
+    pageSize,
+    pageCount: Math.max(1, Math.ceil(total / pageSize)),
+  };
 }
 
 export async function getDiscoveryById(id: string) {
@@ -289,5 +360,4 @@ export async function addJournalEntry(discoveryId: string, data: { title: string
   revalidatePath(`/dossier/${discoveryId}`);
   return entry;
 }
-
 

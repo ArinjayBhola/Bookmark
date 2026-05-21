@@ -824,7 +824,9 @@ export function CaptureForm({ initialData, onSuccess, onCancel }: CaptureFormPro
                         <Image
                           src={m.key ? `/api/media?key=${encodeURIComponent(m.key)}` : m.url}
                           alt={m.name}
-                          className="w-full h-full object-cover"
+                          fill
+                          sizes="(max-width: 640px) 100vw, 50vw"
+                          className="object-cover"
                         />
                         <a
                           href={m.key ? `/api/media?key=${encodeURIComponent(m.key)}` : m.url}

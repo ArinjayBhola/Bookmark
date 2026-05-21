@@ -1,28 +1,32 @@
 'use client';
 
 import * as React from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getExplorationStats, getDiscoveries, deleteDiscovery } from '@/app/actions/discovery';
-import { Mountain, Trash2, Bookmark, ExternalLink } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import Image from 'next/image';
+import { usePathname, useRouter } from 'next/navigation';
+import { Bookmark, CalendarDays, ChevronLeft, ChevronRight, ExternalLink, MapPin, Mountain, Search, Trash2 } from 'lucide-react';
+import { deleteDiscovery } from '@/app/actions/discovery';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { EmptyState, SectionHeader, StatCard, Surface } from '@/components/ui/surface';
+import { Input } from '@/components/ui/input';
 import { FileType } from '@/db/enums';
-import { useRouter } from 'next/navigation';
 
 interface MediaItem {
   name: string;
-  fileType: FileType;
+  fileType: FileType | string;
   url: string;
-  key: string;
-  size: number;
-  mimeType: string;
+  key?: string;
+  size?: number;
+  mimeType?: string;
   id?: string;
 }
 
 interface DiscoveryChronologyItem {
   id: string;
   name: string;
+  localName?: string | null;
   region?: string | null;
+  state?: string | null;
   country?: string | null;
   elevation?: number | null;
   createdAt: Date | string;
@@ -33,47 +37,63 @@ interface DiscoveryChronologyItem {
   [key: string]: unknown;
 }
 
-export function ExplorationStats() {
-  const [deleteConfirmItem, setDeleteConfirmItem] = React.useState<{ id: string; name: string } | null>(null);
-  const [optimisticDeletedIds, setOptimisticDeletedIds] = React.useState<string[]>([]);
-  const queryClient = useQueryClient();
-  const router = useRouter();
-
-  const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ['exploration-stats'],
-    queryFn: () => getExplorationStats(),
-    placeholderData: (previousData) => previousData,
-  });
-
-  const { data: discoveries = [], isLoading: discoveriesLoading } = useQuery({
-    queryKey: ['discoveries-timeline'],
-    queryFn: () => getDiscoveries(),
-    placeholderData: (previousData) => previousData,
-  });
-
-  function getOrdinalSuffix(day: number): string {
-  if (day > 3 && day < 21) return 'th';
-  switch (day % 10) {
-    case 1:  return 'st';
-    case 2:  return 'nd';
-    case 3:  return 'rd';
-    default: return 'th';
-  }
+interface ExplorationStatsData {
+  total: number;
+  statusCounts: Record<string, number>;
+  regionCounts: Record<string, number>;
+  totalAltitudeGain: number;
+  highestElevation: number;
 }
 
-  function formatDate(dateInput: Date | string): string {
-    const date = new Date(dateInput);
-    if (isNaN(date.getTime())) return '';
-    const day = date.getDate();
-    const suffix = getOrdinalSuffix(day);
-    const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-    const month = months[date.getMonth()];
-    const year = date.getFullYear();
-    return `${day}${suffix} ${month} ${year}`;
-  }
+interface DiscoveriesPageData {
+  items: DiscoveryChronologyItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
+}
+
+export function ExplorationStats({
+  stats,
+  discoveriesPage,
+  search,
+}: {
+  stats: ExplorationStatsData;
+  discoveriesPage: DiscoveriesPageData;
+  search: string;
+}) {
+  const [deleteConfirmItem, setDeleteConfirmItem] = React.useState<{ id: string; name: string } | null>(null);
+  const [optimisticDeletedIds, setOptimisticDeletedIds] = React.useState<string[]>([]);
+  const [searchText, setSearchText] = React.useState(search);
+  const [isPending, startTransition] = React.useTransition();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  React.useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      if (searchText === search) return;
+      startTransition(() => {
+        const params = new URLSearchParams();
+        if (searchText.trim()) params.set('search', searchText.trim());
+        router.replace(`${pathname}${params.toString() ? `?${params.toString()}` : ''}`);
+      });
+    }, 250);
+
+    return () => window.clearTimeout(timeout);
+  }, [pathname, router, search, searchText]);
+
+  const visibleDiscoveries = discoveriesPage.items.filter((d) => !optimisticDeletedIds.includes(d.id));
+  const firstItem = discoveriesPage.total === 0 ? 0 : (discoveriesPage.page - 1) * discoveriesPage.pageSize + 1;
+  const lastItem = Math.min(discoveriesPage.page * discoveriesPage.pageSize, discoveriesPage.total);
+
+  const goToPage = (page: number) => {
+    startTransition(() => {
+      const params = new URLSearchParams();
+      if (search.trim()) params.set('search', search.trim());
+      if (page > 1) params.set('page', String(page));
+      router.push(`${pathname}${params.toString() ? `?${params.toString()}` : ''}`);
+    });
+  };
 
   const handleConfirmDelete = async () => {
     if (!deleteConfirmItem) return;
@@ -81,154 +101,101 @@ export function ExplorationStats() {
     setDeleteConfirmItem(null);
     setOptimisticDeletedIds((prev) => [...prev, id]);
 
-    // 3. Background API deletion
     try {
       await deleteDiscovery(id);
-      queryClient.invalidateQueries({ queryKey: ['discoveries-timeline'] });
-      queryClient.invalidateQueries({ queryKey: ['exploration-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['discoveries'] });
+      router.refresh();
     } catch (error) {
       console.error('Delete error:', error);
-      // Revert optimistic UI change
       setOptimisticDeletedIds((prev) => prev.filter((item) => item !== id));
       alert(`Failed to delete "${name}". Restoring bookmark.`);
     }
   };
 
-  if (statsLoading || discoveriesLoading || !stats) {
-    return (
-      <div className="max-w-6xl mx-auto p-8 space-y-8 animate-pulse bg-[#fafafa] min-h-screen">
-        <div className="h-8 bg-zinc-200 w-1/3 rounded-xl" />
-        <div className="h-72 bg-zinc-200 rounded-2xl" />
-      </div>
-    );
-  }
-
-  const visibleDiscoveries = discoveries.filter((d: DiscoveryChronologyItem) => !optimisticDeletedIds.includes(d.id));
-
   return (
-    <div className="max-w-6xl mx-auto space-y-10 p-8 bg-[#fafafa] min-h-screen text-zinc-900 font-sans">
-      {/* Header */}
-      <div className="border-b border-zinc-200 pb-6 flex items-baseline justify-between">
-        <div className="space-y-1.5">
-          <h1 className="text-3xl font-bold font-serif text-zinc-900 flex items-center gap-3">
-            <div className="p-2.5 bg-sky-50 border border-sky-100 rounded-xl text-sky-600 shadow-sm">
-              <Bookmark className="size-6" />
-            </div>
-            <span>My Dream Mountain Bookmarks</span>
-          </h1>
-          <p className="text-sm text-zinc-500">
-            Your personal curated bucket list of breathtaking alpine locations saved from Instagram, Reddit, and across the web.
-          </p>
-        </div>
-        <div className="text-right font-medium text-sm text-zinc-500 bg-white border border-zinc-200 px-5 py-3 rounded-2xl shadow-sm">
-          <div className="text-[10px] text-zinc-400 uppercase tracking-wider font-bold mb-1">TOTAL SAVED DREAMS</div>
-          <div className="text-3xl font-bold text-sky-600">{stats.total}</div>
-        </div>
-      </div>
-
-      {/* Saved Mountain Discoveries List with Delete */}
-      <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm space-y-6">
-        <div className="text-sm font-bold font-serif text-zinc-800 uppercase tracking-wider border-b border-zinc-100 pb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Bookmark className="size-5 text-sky-500" />
-            <span>📌 Saved Mountain Discoveries</span>
+    <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6 lg:p-8">
+      <SectionHeader
+        eyebrow="Tracking"
+        title="Saved discoveries"
+        description="Searchable, paginated planning records for routes, references, and mountain ideas."
+        action={
+          <div className="grid grid-cols-2 gap-3 sm:min-w-[360px]">
+            <StatCard label="Saved" value={stats.total} icon={<Bookmark className="size-4" />} />
+            <StatCard label="Highest" value={stats.highestElevation ? `${formatNumber(stats.highestElevation)}m` : 'No data'} icon={<Mountain className="size-4" />} />
           </div>
-          <span className="text-xs text-zinc-500 font-medium">Manage your personal mountain bucket list</span>
+        }
+      />
+
+      <Surface className="overflow-hidden">
+        <div className="grid gap-4 border-b p-4 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--muted)]" />
+            <Input
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Search by name, range, country, notes..."
+              className="pl-9"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3 text-xs text-[var(--muted)] lg:justify-end">
+            <span>{isPending ? 'Updating...' : `${firstItem}-${lastItem} of ${discoveriesPage.total}`}</span>
+            {search ? (
+              <Button type="button" variant="ghost" size="sm" onClick={() => setSearchText('')}>
+                Clear
+              </Button>
+            ) : null}
+          </div>
         </div>
 
-        <div className="space-y-4 pt-2">
-          {visibleDiscoveries.map((d: DiscoveryChronologyItem) => (
-            <div
-              key={d.id}
-              onClick={() => router.push(`/dossier/${d.id}`)}
-              className="flex items-center justify-between p-5 bg-zinc-50 rounded-2xl border border-zinc-200 transition-all hover:border-zinc-300 hover:shadow-sm group cursor-pointer"
-            >
-              <div className="flex items-center gap-5 min-w-0 pr-4 flex-1">
-                <div className="p-3.5 bg-sky-50 border border-sky-100 text-sky-600 rounded-xl shrink-0">
-                  <Mountain className="size-5" />
-                </div>
-                <div className="truncate space-y-1 min-w-0 flex-1">
-                  <div className="text-base font-bold font-serif text-zinc-900 truncate group-hover:text-sky-600 transition-colors flex items-center gap-2">
-                    <span>{d.name}</span>
-                    {d.externalLinks && d.externalLinks.length > 0 && (
-                      <a
-                        href={d.externalLinks[0]}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-xs text-sky-500 hover:underline inline-flex items-center gap-0.5 font-sans font-medium"
-                      >
-                        <ExternalLink className="size-3" /> Link
-                      </a>
-                    )}
-                  </div>
-                  <div className="text-xs text-zinc-500 font-medium truncate flex items-center gap-2">
-                    <span>{d.region || d.country || 'Unknown Range'}</span>
-                    {d.whySaved && (
-                      <>
-                        <span>•</span>
-                        <span className="text-zinc-500 italic truncate">&quot;{d.whySaved}&quot;</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
+        {visibleDiscoveries.length === 0 ? (
+          <EmptyState
+            className="my-10 border-0 shadow-none"
+            icon={<Mountain className="size-6" />}
+            title={search ? 'No matches found' : 'No saved discoveries'}
+            description={search ? 'Try a different place, region, or planning note.' : 'Use Add in the header to capture your first destination.'}
+          />
+        ) : (
+          <div className="grid gap-3 p-4">
+            {visibleDiscoveries.map((d) => (
+              <DiscoveryCard
+                key={d.id}
+                discovery={d}
+                onOpen={() => router.push(`/dossier/${d.id}`)}
+                onDelete={() => setDeleteConfirmItem({ id: d.id, name: d.name })}
+              />
+            ))}
+          </div>
+        )}
 
-              <div className="flex items-center gap-4 shrink-0">
-                {d.elevation && d.elevation > 0 ? (
-                  <div className="text-sm font-bold text-zinc-700 bg-white px-3 py-1.5 rounded-lg border border-zinc-200 shadow-xs">
-                    {d.elevation.toLocaleString()}m
-                  </div>
-                ) : null}
-                <div className="text-xs text-zinc-400 font-medium mr-2">{formatDate(d.createdAt)}</div>
-
-                {/* Actions: Delete Icon */}
-                <div className="flex items-center gap-1.5 border-l border-zinc-200 pl-4">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteConfirmItem({ id: d.id, name: d.name });
-                    }}
-                    className="size-8 p-0 text-zinc-600 hover:text-red-600 hover:bg-white rounded-lg border border-transparent hover:border-zinc-200 shadow-none hover:shadow-2xs transition-all"
-                    title="Delete"
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ))}
+        <div className="flex flex-col gap-3 border-t px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-[var(--muted)]">
+            Page {discoveriesPage.page} of {discoveriesPage.pageCount}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" disabled={discoveriesPage.page <= 1 || isPending} onClick={() => goToPage(discoveriesPage.page - 1)}>
+              <ChevronLeft className="size-4" />
+              Previous
+            </Button>
+            <Button type="button" variant="outline" size="sm" disabled={discoveriesPage.page >= discoveriesPage.pageCount || isPending} onClick={() => goToPage(discoveriesPage.page + 1)}>
+              Next
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
         </div>
-      </div>
+      </Surface>
 
-      {/* Custom Deletion Confirmation Modal */}
       <Dialog open={!!deleteConfirmItem} onOpenChange={(open) => !open && setDeleteConfirmItem(null)}>
-        <DialogContent className="max-w-md bg-white border border-zinc-200 shadow-2xl rounded-3xl p-6">
-          <DialogHeader className="space-y-2">
-            <DialogTitle className="text-xl font-bold font-serif text-zinc-900 flex items-center gap-2">
-              <Trash2 className="size-5 text-red-600" />
-              <span>Confirm Bookmark Deletion</span>
-            </DialogTitle>
-            <DialogDescription className="text-sm text-zinc-600">
-              Are you sure you want to delete <strong className="text-zinc-900 font-semibold">&quot;{deleteConfirmItem?.name}&quot;</strong> from your dream locations? This action will remove it from your personal bucket list.
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete discovery</DialogTitle>
+            <DialogDescription>
+              This removes &quot;{deleteConfirmItem?.name}&quot; from your saved discoveries.
             </DialogDescription>
           </DialogHeader>
-
-          <DialogFooter className="mt-6 flex items-center justify-end gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setDeleteConfirmItem(null)}
-              className="rounded-xl text-xs font-bold px-4 py-2"
-            >
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setDeleteConfirmItem(null)}>
               Cancel
             </Button>
-            <Button
-              onClick={handleConfirmDelete}
-              className="rounded-xl text-xs font-bold px-4 py-2 bg-red-600 hover:bg-red-700 text-white shadow-md"
-            >
+            <Button variant="destructive" onClick={handleConfirmDelete}>
               Delete
             </Button>
           </DialogFooter>
@@ -236,4 +203,110 @@ export function ExplorationStats() {
       </Dialog>
     </div>
   );
+}
+
+function DiscoveryCard({
+  discovery,
+  onOpen,
+  onDelete,
+}: {
+  discovery: DiscoveryChronologyItem;
+  onOpen: () => void;
+  onDelete: () => void;
+}) {
+  const image = discovery.media?.find((item) => item.fileType === 'IMAGE');
+  const location = [discovery.region, discovery.state, discovery.country].filter(Boolean).join(', ') || 'Unknown range';
+
+  return (
+    <article
+      onClick={onOpen}
+      className="group grid cursor-pointer gap-4 rounded-[var(--radius-lg)] border bg-[var(--surface)] p-3 shadow-sm transition hover:border-[var(--border-strong)] hover:shadow-[var(--shadow-soft)] sm:grid-cols-[128px_1fr_auto]"
+    >
+      <div className="relative h-32 overflow-hidden rounded-[var(--radius-md)] bg-[var(--surface-muted)] sm:h-full">
+        {image ? (
+          <Image src={getMediaUrl(image)} alt={image.name || discovery.name} fill sizes="128px" className="object-cover transition duration-300 group-hover:scale-105" />
+        ) : (
+          <div className="flex h-full items-center justify-center text-[var(--accent)]">
+            <Mountain className="size-8" />
+          </div>
+        )}
+      </div>
+
+      <div className="min-w-0 space-y-3 py-1">
+        <div className="space-y-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="truncate text-lg font-semibold tracking-tight text-[var(--foreground)]">{discovery.name}</h2>
+            {discovery.externalLinks && discovery.externalLinks.length > 0 ? (
+              <a
+                href={discovery.externalLinks[0]}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => event.stopPropagation()}
+                className="inline-flex shrink-0 items-center gap-1 rounded-[var(--radius-xs)] px-1.5 py-0.5 text-xs font-medium text-[var(--accent)] hover:bg-[var(--accent-soft)]"
+              >
+                <ExternalLink className="size-3" />
+                Link
+              </a>
+            ) : null}
+          </div>
+          {discovery.localName ? <p className="truncate text-sm text-[var(--muted)]">{discovery.localName}</p> : null}
+        </div>
+
+        <p className="line-clamp-2 text-sm leading-6 text-[var(--muted)]">
+          {discovery.whySaved || discovery.expeditionDreams || 'No planning note yet.'}
+        </p>
+
+        <div className="flex flex-wrap gap-2 text-xs font-medium text-[var(--muted-foreground)]">
+          <span className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-2.5 py-1">
+            <MapPin className="size-3.5" />
+            {location}
+          </span>
+          {discovery.elevation ? (
+            <span className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-2.5 py-1">
+              <Mountain className="size-3.5" />
+              {formatNumber(discovery.elevation)}m
+            </span>
+          ) : null}
+          <span className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-2.5 py-1">
+            <CalendarDays className="size-3.5" />
+            {formatDate(discovery.createdAt)}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-2 border-t pt-3 sm:flex-col sm:items-end sm:border-t-0 sm:pt-0">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={(event) => {
+            event.stopPropagation();
+            onDelete();
+          }}
+          aria-label={`Delete ${discovery.name}`}
+          className="text-[var(--muted)] hover:text-[var(--danger)]"
+        >
+          <Trash2 className="size-4" />
+        </Button>
+        <ChevronRight className="size-4 text-[var(--muted)] transition group-hover:translate-x-0.5" />
+      </div>
+    </article>
+  );
+}
+
+function getMediaUrl(media: MediaItem) {
+  if (!media.url.includes('.r2.cloudflarestorage.com')) return media.url;
+  const urlObj = new URL(media.url);
+  const parts = urlObj.pathname.split('/').filter(Boolean);
+  const key = parts.slice(1).join('/');
+  return `/api/media?key=${encodeURIComponent(key)}`;
+}
+
+function formatDate(dateInput: Date | string): string {
+  const date = new Date(dateInput);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(date);
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value);
 }

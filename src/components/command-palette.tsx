@@ -1,10 +1,11 @@
 'use client';
 
 import * as React from 'react';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { Search, MapPin, Compass, Plus, BarChart2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+import { BarChart2, Compass, MapPin, Plus, Search } from 'lucide-react';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
 
 interface CommandPaletteProps {
   open: boolean;
@@ -36,23 +37,23 @@ export function CommandPalette({ open, onOpenChange, onOpenQuickAdd, onSelectDis
     enabled: open,
   });
 
+  const quickActions = React.useMemo(
+    () => [
+      { label: 'New discovery', detail: 'Capture coordinates, notes, and media', icon: Plus, action: onOpenQuickAdd, shortcut: 'Ctrl I' },
+      { label: 'Open map', detail: 'Return to spatial exploration', icon: Compass, action: () => router.push('/'), shortcut: 'Alt M' },
+      { label: 'Open tracking', detail: 'Review saved discoveries', icon: BarChart2, action: () => router.push('/tracking'), shortcut: 'Alt T' },
+    ],
+    [onOpenQuickAdd, router]
+  );
+
+  const showQuickActions = search.trim() === '';
+  const totalItemsCount = (showQuickActions ? quickActions.length : 0) + discoveries.length;
+
   const handleSelectAction = (action: () => void) => {
     onOpenChange(false);
     action();
   };
 
-  // Compile selectable items list to calculate total item count
-  const totalItemsCount = React.useMemo(() => {
-    const quickActionsCount = search.trim() === '' ? 3 : 0;
-    return quickActionsCount + discoveries.length;
-  }, [search, discoveries]);
-
-  // Reset index when search or modal open state changes
-  React.useEffect(() => {
-    setActiveItemIndex(0);
-  }, [search, open]);
-
-  // Handle keyboard events (ArrowUp, ArrowDown, Enter)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (totalItemsCount === 0) return;
 
@@ -64,149 +65,131 @@ export function CommandPalette({ open, onOpenChange, onOpenQuickAdd, onSelectDis
       setActiveItemIndex((prev) => (prev - 1 + totalItemsCount) % totalItemsCount);
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      const idx = activeItemIndex;
-      if (search.trim() === '') {
-        if (idx === 0) {
-          handleSelectAction(onOpenQuickAdd);
-        } else if (idx === 1) {
-          handleSelectAction(() => router.push('/'));
-        } else if (idx === 2) {
-          handleSelectAction(() => router.push('/tracking'));
-        } else {
-          const discoveryIdx = idx - 3;
-          const disc = discoveries[discoveryIdx];
-          if (disc) {
-            handleSelectAction(() => onSelectDiscovery(disc.id));
-          }
-        }
-      } else {
-        const disc = discoveries[idx];
-        if (disc) {
-          handleSelectAction(() => onSelectDiscovery(disc.id));
-        }
+      if (showQuickActions && activeItemIndex < quickActions.length) {
+        handleSelectAction(quickActions[activeItemIndex].action);
+        return;
       }
+      const discoveryIdx = activeItemIndex - (showQuickActions ? quickActions.length : 0);
+      const discovery = discoveries[discoveryIdx];
+      if (discovery) handleSelectAction(() => onSelectDiscovery(discovery.id));
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl gap-0 p-0 overflow-hidden bg-[#f6f5f2] border-stone-300 shadow-2xl">
-        <DialogTitle className="sr-only">Command Palette</DialogTitle>
-        <div className="flex items-center border-b border-stone-300 px-3">
-          <Search className="size-5 text-stone-500 mr-2 shrink-0" />
+      <DialogContent className="max-w-2xl gap-0 overflow-hidden p-0">
+        <DialogTitle className="sr-only">Command palette</DialogTitle>
+        <div className="flex items-center border-b px-4">
+          <Search className="mr-3 size-5 shrink-0 text-[var(--muted)]" />
           <input
             type="text"
-            className="flex h-14 w-full bg-transparent py-3 text-base outline-none placeholder:text-stone-500 text-stone-900"
-            placeholder="Search mountain intelligence, coordinates, regions, or type a command..."
+            className="h-14 w-full bg-transparent text-base text-[var(--foreground)] outline-none placeholder:text-[var(--muted)]"
+            placeholder="Search discoveries or run a command"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setActiveItemIndex(0);
+            }}
             onKeyDown={handleKeyDown}
             autoFocus
           />
         </div>
 
-        <div className="max-h-[60vh] overflow-y-auto p-2 space-y-4">
-          {/* Quick Actions */}
-          {search.trim() === '' && (
-            <div>
-              <div className="px-2 py-1 text-xs font-semibold text-stone-500 uppercase tracking-wider">Quick Commands</div>
-              <div className="mt-1 space-y-1">
-                <button
-                  onClick={() => handleSelectAction(onOpenQuickAdd)}
-                  onMouseEnter={() => setActiveItemIndex(0)}
-                  className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-stone-800 transition-colors text-left font-medium ${
-                    activeItemIndex === 0 ? 'bg-stone-200/90 text-stone-950 font-bold shadow-2xs' : 'hover:bg-stone-200/50'
-                  }`}
-                >
-                  <Plus className="size-4 text-stone-600" />
-                  <span>Instant Capture Discovery</span>
-                  <kbd className="ml-auto text-xs bg-stone-300 px-1.5 py-0.5 rounded text-stone-700">Ctrl+I</kbd>
-                </button>
-                <button
-                  onClick={() => handleSelectAction(() => router.push('/'))}
-                  onMouseEnter={() => setActiveItemIndex(1)}
-                  className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-stone-800 transition-colors text-left font-medium ${
-                    activeItemIndex === 1 ? 'bg-stone-200/90 text-stone-950 font-bold shadow-2xs' : 'hover:bg-stone-200/50'
-                  }`}
-                >
-                  <Compass className="size-4 text-stone-600" />
-                  <span>Explore Immersive Map</span>
-                  <kbd className="ml-auto text-xs bg-stone-300 px-1.5 py-0.5 rounded text-stone-700">⌥M</kbd>
-                </button>
-                <button
-                  onClick={() => handleSelectAction(() => router.push('/tracking'))}
-                  onMouseEnter={() => setActiveItemIndex(2)}
-                  className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-stone-800 transition-colors text-left font-medium ${
-                    activeItemIndex === 2 ? 'bg-stone-200/90 text-stone-950 font-bold shadow-2xs' : 'hover:bg-stone-200/50'
-                  }`}
-                >
-                  <BarChart2 className="size-4 text-stone-600" />
-                  <span>Exploration Tracking & Stats</span>
-                  <kbd className="ml-auto text-xs bg-stone-300 px-1.5 py-0.5 rounded text-stone-700">⌥T</kbd>
-                </button>
-
-              </div>
-            </div>
+        <div className="max-h-[62vh] space-y-5 overflow-y-auto p-3 scrollbar-premium">
+          {showQuickActions && (
+            <CommandSection title="Commands">
+              {quickActions.map((item, idx) => (
+                <CommandItem
+                  key={item.label}
+                  active={activeItemIndex === idx}
+                  icon={<item.icon className="size-4" />}
+                  title={item.label}
+                  detail={item.detail}
+                  shortcut={item.shortcut}
+                  onMouseEnter={() => setActiveItemIndex(idx)}
+                  onClick={() => handleSelectAction(item.action)}
+                />
+              ))}
+            </CommandSection>
           )}
 
-          {/* Search Results */}
-          <div>
-            <div className="px-2 py-1 text-xs font-semibold text-stone-500 uppercase tracking-wider">
-              {search.trim() === '' ? 'Recent Discoveries' : 'Matching Intelligence'}
-            </div>
+          <CommandSection title={showQuickActions ? 'Discoveries' : 'Matching discoveries'}>
             {isLoading ? (
-              <div className="p-4 text-center text-sm text-stone-500 animate-pulse">Scanning terrain database...</div>
+              <div className="rounded-[var(--radius-md)] border bg-[var(--surface-muted)] p-4 text-center text-sm text-[var(--muted)]">Searching archive...</div>
             ) : discoveries.length === 0 ? (
-              <div className="p-4 text-center text-sm text-stone-500">No mountain records found matching &quot;{search}&quot;.</div>
-            ) : (
-              <div className="mt-1 space-y-1">
-                {discoveries.map((d, idx) => {
-                  const globalIdx = search.trim() === '' ? 3 + idx : idx;
-                  const isActive = activeItemIndex === globalIdx;
-                  return (
-                    <button
-                      key={d.id}
-                      onClick={() => handleSelectAction(() => onSelectDiscovery(d.id))}
-                      onMouseEnter={() => setActiveItemIndex(globalIdx)}
-                      className={`flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm text-stone-800 transition-colors text-left ${
-                        isActive ? 'bg-stone-200/90 text-stone-950 font-bold shadow-2xs' : 'hover:bg-stone-200/50'
-                      }`}
-                    >
-                      <MapPin className="size-4 text-stone-600 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-stone-900 truncate">{d.name}</div>
-                        <div className="text-xs text-stone-600 truncate flex items-center gap-2 mt-0.5">
-                          <span>{d.region || d.country || 'Unknown Region'}</span>
-                          {d.elevation && (
-                            <>
-                              <span>•</span>
-                              <span>{d.elevation.toLocaleString()}m</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
+              <div className="rounded-[var(--radius-md)] border bg-[var(--surface-muted)] p-4 text-center text-sm text-[var(--muted)]">
+                No discoveries found{search ? ` for "${search}"` : ''}.
               </div>
+            ) : (
+              discoveries.map((d, idx) => {
+                const globalIdx = idx + (showQuickActions ? quickActions.length : 0);
+                return (
+                  <CommandItem
+                    key={d.id}
+                    active={activeItemIndex === globalIdx}
+                    icon={<MapPin className="size-4" />}
+                    title={d.name}
+                    detail={`${d.region || d.country || 'Unknown region'}${d.elevation ? ` • ${d.elevation.toLocaleString()}m` : ''}`}
+                    onMouseEnter={() => setActiveItemIndex(globalIdx)}
+                    onClick={() => handleSelectAction(() => onSelectDiscovery(d.id))}
+                  />
+                );
+              })
             )}
-          </div>
+          </CommandSection>
         </div>
 
-        <div className="bg-[#e8e6dd] px-4 py-2 text-xs text-stone-600 flex items-center justify-between border-t border-stone-300 font-mono">
-          <div>
-            <span className="font-bold">esc</span> to close
-          </div>
-          <div className="flex gap-4">
-            <span>
-              <kbd className="bg-stone-300 px-1 py-0.5 rounded text-stone-800">↑</kbd> <kbd className="bg-stone-300 px-1 py-0.5 rounded text-stone-800">↓</kbd> navigate
-            </span>
-            <span>
-              <kbd className="bg-stone-300 px-1 py-0.5 rounded text-stone-800">↵</kbd> select
-            </span>
-          </div>
+        <div className="flex items-center justify-between border-t bg-[var(--surface-muted)] px-4 py-2 text-xs text-[var(--muted)]">
+          <span>Esc to close</span>
+          <span>Arrow keys to navigate, Enter to select</span>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function CommandSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-2">
+      <div className="px-1 text-xs font-semibold uppercase text-[var(--muted)]">{title}</div>
+      <div className="space-y-1">{children}</div>
+    </section>
+  );
+}
+
+function CommandItem({
+  active,
+  icon,
+  title,
+  detail,
+  shortcut,
+  onClick,
+  onMouseEnter,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  title: string;
+  detail?: string;
+  shortcut?: string;
+  onClick: () => void;
+  onMouseEnter: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      className={cn(
+        'flex w-full items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]',
+        active ? 'bg-[var(--surface-muted)] text-[var(--foreground)]' : 'text-[var(--foreground)] hover:bg-[var(--surface-muted)]'
+      )}
+    >
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border bg-[var(--surface)] text-[var(--accent)]">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold">{title}</span>
+        {detail && <span className="block truncate text-xs text-[var(--muted)]">{detail}</span>}
+      </span>
+      {shortcut && <kbd className="rounded border bg-[var(--surface)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{shortcut}</kbd>}
+    </button>
   );
 }

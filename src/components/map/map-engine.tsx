@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Map, { Marker, NavigationControl, ViewStateChangeEvent, Source, Layer } from 'react-map-gl/maplibre';
 import useSupercluster from 'use-supercluster';
-import { Mountain, MapPin } from 'lucide-react';
+import { Layers, LocateFixed, Mountain, MapPin, Rotate3D, X } from 'lucide-react';
 import { getDiscoveryById } from '@/app/actions/discovery';
 import { useQuery } from '@tanstack/react-query';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -312,24 +312,25 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
   const activeMapStyle = mapMode === 'STREET' ? MAP_STYLES.STREET : (MAP_STYLES.SATELLITE as unknown as import('maplibre-gl').StyleSpecification);
 
   return (
-    <div className="w-full h-full relative bg-[#fafafa]">
+    <div className="relative h-full w-full bg-[var(--background)]">
       {/* Map Style Toggle Overlay */}
-      <div className="absolute top-4 right-4 z-10 bg-white/90 backdrop-blur-md p-1 rounded-2xl shadow-xl border border-zinc-200/80 flex items-center gap-1 font-sans">
+      <div className="absolute right-4 top-4 z-10 flex items-center gap-1 rounded-[var(--radius-md)] border bg-[var(--surface)]/95 p-1 font-sans shadow-[var(--shadow-soft)] backdrop-blur">
         <button
           type="button"
           onClick={() => setMapMode('STREET')}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${mapMode === 'STREET' ? 'bg-zinc-900 text-white shadow-md' : 'text-zinc-600 hover:text-zinc-900'}`}
+          className={`flex items-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold transition ${mapMode === 'STREET' ? 'bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--foreground)]'}`}
         >
-          🗺️ Street
+          <Layers className="size-3.5" />
+          Street
         </button>
         <button
           type="button"
           onClick={() => setMapMode('SATELLITE')}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${mapMode === 'SATELLITE' ? 'bg-zinc-900 text-white shadow-md' : 'text-zinc-600 hover:text-zinc-900'}`}
+          className={`rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold transition ${mapMode === 'SATELLITE' ? 'bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--foreground)]'}`}
         >
-          🛰️ Satellite
+          Satellite
         </button>
-        <div className="w-[1px] h-4 bg-zinc-200 mx-1" />
+        <div className="mx-1 h-4 w-px bg-[var(--border)]" />
         <button
           type="button"
           onClick={() => {
@@ -355,13 +356,14 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
               }));
             }
           }}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 ${
+          className={`flex items-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold transition ${
             is3D 
-              ? 'bg-sky-600 text-white shadow-md' 
-              : 'text-zinc-600 hover:text-zinc-900'
+              ? 'bg-[var(--accent)] text-white shadow-sm dark:text-zinc-950' 
+              : 'text-[var(--muted)] hover:text-[var(--foreground)]'
           }`}
         >
-          🏔️ 3D
+          <Rotate3D className="size-3.5" />
+          3D
         </button>
       </div>
 
@@ -440,14 +442,14 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
                 setTimeout(() => setCopiedUserPin(false), 2000);
               }}
             >
-              <div className="absolute -top-1 size-8 bg-sky-500/30 rounded-full animate-ping pointer-events-none" />
-              <div className="flex items-center gap-1.5 px-3.5 py-2 bg-sky-600 text-white rounded-2xl border-2 border-white shadow-xl backdrop-blur-md transition-transform active:scale-95">
-                <MapPin className="size-4 animate-pulse text-white shrink-0" />
+              <div className="absolute -top-1 size-8 rounded-full bg-[var(--accent)]/25 animate-ping pointer-events-none" />
+              <div className="flex items-center gap-1.5 rounded-[var(--radius-md)] border-2 border-white bg-[var(--accent)] px-3.5 py-2 text-white shadow-[var(--shadow-soft)] transition-transform active:scale-95 dark:text-zinc-950">
+                <LocateFixed className="size-4 shrink-0" />
                 <span className="text-xs font-bold font-sans tracking-tight">
-                  {copiedUserPin ? '✅ Copied My Coordinates!' : 'My Location'}
+                  {copiedUserPin ? 'Copied coordinates' : 'My location'}
                 </span>
               </div>
-              <div className="w-1.5 h-3 bg-sky-800 shadow-md rounded-b-sm" />
+              <div className="h-3 w-1.5 rounded-b-sm bg-[var(--accent)] shadow-md" />
             </div>
           </Marker>
         )}
@@ -465,11 +467,11 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
                 setTimeout(() => setCopiedPin(false), 2000);
               }}
             >
-              <div className="absolute -top-1 size-8 bg-purple-500/30 rounded-full animate-ping pointer-events-none" />
-              <div className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-600 text-white rounded-2xl border-2 border-white shadow-xl backdrop-blur-md transition-transform active:scale-95">
-                <MapPin className="size-4 animate-pulse text-white shrink-0" />
+              <div className="absolute -top-1 size-8 rounded-full bg-[var(--primary)]/20 animate-ping pointer-events-none" />
+              <div className="flex items-center gap-1.5 rounded-[var(--radius-md)] border-2 border-white bg-[var(--primary)] px-3.5 py-2 text-[var(--primary-foreground)] shadow-[var(--shadow-soft)] transition-transform active:scale-95">
+                <MapPin className="size-4 shrink-0" />
                 <span className="text-xs font-bold font-sans tracking-tight">
-                  {copiedPin ? '✅ Copied Coordinates!' : `Dropped Pin (${clickedLocation.latitude.toFixed(2)}, ${clickedLocation.longitude.toFixed(2)})`}
+                  {copiedPin ? 'Copied coordinates' : `Dropped pin (${clickedLocation.latitude.toFixed(2)}, ${clickedLocation.longitude.toFixed(2)})`}
                 </span>
                 <button
                   type="button"
@@ -477,13 +479,13 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
                     e.stopPropagation();
                     setClickedLocation(null);
                   }}
-                  className="ml-1 p-0.5 rounded-full hover:bg-purple-700 transition-colors text-white/80 hover:text-white"
+                  className="ml-1 rounded-full p-0.5 text-[var(--primary-foreground)]/80 transition hover:bg-white/10 hover:text-[var(--primary-foreground)]"
                   title="Remove pin"
                 >
-                  ✕
+                  <X className="size-3" />
                 </button>
               </div>
-              <div className="w-1.5 h-3 bg-purple-800 shadow-md rounded-b-sm" />
+              <div className="h-3 w-1.5 rounded-b-sm bg-[var(--primary)] shadow-md" />
             </div>
           </Marker>
         )}
@@ -496,7 +498,7 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
             return (
               <Marker key={`cluster-${cluster.id}`} latitude={latitude} longitude={longitude}>
                 <div
-                  className="flex items-center justify-center size-10 rounded-full bg-white backdrop-blur-md text-sky-600 font-bold text-sm border-2 border-sky-500 shadow-xl cursor-pointer hover:scale-110 transition-transform"
+                  className="flex size-10 cursor-pointer items-center justify-center rounded-full border-2 border-[var(--accent)] bg-[var(--surface)] text-sm font-bold text-[var(--accent)] shadow-[var(--shadow-soft)] backdrop-blur transition-transform hover:scale-105"
                   onClick={() => {
                     const expansionZoom = Math.min(supercluster?.getClusterExpansionZoom(cluster.id as number) || 12, 16);
                     mapRef.current?.flyTo({
@@ -523,25 +525,25 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
               >
                 {/* Tooltip on hover */}
                 <div className="absolute bottom-full mb-2 hidden group-hover:flex flex-col items-center pointer-events-none z-20">
-                  <div className="bg-white/95 backdrop-blur-md text-zinc-800 text-sm px-3 py-1.5 rounded-xl shadow-xl whitespace-nowrap font-sans flex items-center gap-1.5 border border-zinc-200">
+                  <div className="flex items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-sm)] border bg-[var(--surface)] px-3 py-1.5 font-sans text-sm text-[var(--foreground)] shadow-[var(--shadow-soft)]">
                     <span className="font-bold">{name}</span>
-                    {elevation && <span className="text-sky-600 font-semibold">({elevation}m)</span>}
+                    {elevation && <span className="font-semibold text-[var(--accent)]">({elevation}m)</span>}
                   </div>
-                  <div className="size-2 bg-white rotate-45 -mt-1 border-r border-b border-zinc-200" />
+                  <div className="-mt-1 size-2 rotate-45 border-b border-r bg-[var(--surface)]" />
                 </div>
 
                 {/* Marker Pin */}
                 <div
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border backdrop-blur-md shadow-md transition-all group-hover:scale-105 group-hover:shadow-lg ${
+                  className={`flex items-center gap-1.5 rounded-[var(--radius-sm)] border px-3 py-1.5 shadow-sm backdrop-blur transition-all group-hover:scale-105 group-hover:shadow-[var(--shadow-soft)] ${
                     activeDossierId === discoveryId
-                      ? 'bg-zinc-950 text-white border-zinc-900 shadow-zinc-950/20'
-                      : 'bg-white/95 text-zinc-900 border-zinc-200/80 hover:bg-white shadow-zinc-900/10'
+                      ? 'border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]'
+                      : 'border-[var(--border)] bg-[var(--surface)]/95 text-[var(--foreground)] hover:bg-[var(--surface)]'
                   }`}
                 >
-                  <Mountain className="size-4 text-sky-500" />
+                  <Mountain className="size-4 text-[var(--accent)]" />
                   <span className="text-xs font-bold font-sans tracking-tight max-w-[120px] truncate">{name}</span>
                 </div>
-                <div className="w-1 h-2.5 bg-zinc-300 shadow-sm rounded-b-sm" />
+                <div className="h-2.5 w-1 rounded-b-sm bg-[var(--border-strong)] shadow-sm" />
               </div>
             </Marker>
           );

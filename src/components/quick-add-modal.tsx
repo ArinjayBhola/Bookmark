@@ -13,11 +13,11 @@ interface QuickAddModalProps {
 export function QuickAddModal({ open, onOpenChange, onSuccess }: QuickAddModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl bg-white border-zinc-200 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold font-serif text-zinc-900">Instant Terrain Capture</DialogTitle>
-          <DialogDescription className="text-xs text-zinc-500">
-            Rapidly log mountain intelligence, coordinates, and expedition notes into your private vault.
+          <DialogTitle className="text-xl font-semibold">New discovery</DialogTitle>
+          <DialogDescription>
+            Save coordinates, planning notes, references, and expedition media.
           </DialogDescription>
         </DialogHeader>
 

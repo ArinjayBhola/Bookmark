@@ -302,6 +302,7 @@ const getExplorationStatsCached = unstable_cache(
         region: true,
         altitudeGain: true,
         elevation: true,
+        difficulty: true,
       },
     });
 
@@ -311,6 +312,14 @@ const getExplorationStatsCached = unstable_cache(
       DREAM_EXPEDITION: 0,
       COMPLETED: 0,
       ABANDONED: 0,
+    };
+
+    const difficultyCounts = {
+      EASY: 0,
+      MODERATE: 0,
+      STRENUOUS: 0,
+      TECHNICAL: 0,
+      EXTREME: 0,
     };
 
     const regionCounts: Record<string, number> = {};
@@ -327,11 +336,15 @@ const getExplorationStatsCached = unstable_cache(
       if (d.elevation && d.elevation > highestElevation) {
         highestElevation = d.elevation;
       }
+      if (d.difficulty && d.difficulty in difficultyCounts) {
+        difficultyCounts[d.difficulty as keyof typeof difficultyCounts] += 1;
+      }
     });
 
     return {
       total: allDiscoveries.length,
       statusCounts,
+      difficultyCounts,
       regionCounts,
       totalAltitudeGain,
       highestElevation,

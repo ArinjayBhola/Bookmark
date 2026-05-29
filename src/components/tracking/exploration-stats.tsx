@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
-import { Bookmark, CalendarDays, ChevronLeft, ChevronRight, ExternalLink, MapPin, Mountain, Search, Trash2 } from 'lucide-react';
+import { Bookmark, CalendarDays, ChevronLeft, ChevronRight, ExternalLink, MapPin, Mountain, Search, Trash2, Globe } from 'lucide-react';
 import { deleteDiscovery } from '@/app/actions/discovery';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -40,6 +40,7 @@ interface DiscoveryChronologyItem {
 interface ExplorationStatsData {
   total: number;
   statusCounts: Record<string, number>;
+  difficultyCounts: Record<string, number>;
   regionCounts: Record<string, number>;
   totalAltitudeGain: number;
   highestElevation: number;
@@ -124,6 +125,30 @@ export function ExplorationStats({
           </div>
         }
       />
+
+      {/* Geographic Coverage Matrix */}
+      <Surface className="p-5 space-y-4">
+        <div className="flex items-center gap-2 border-b pb-3">
+          <Globe className="size-4 text-[var(--accent)]" />
+          <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--foreground)]">Geographic Coverage Matrix</h3>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {Object.keys(stats.regionCounts).length === 0 ? (
+            <div className="col-span-full text-center py-6 text-xs text-[var(--muted)]">No regional data.</div>
+          ) : (
+            Object.entries(stats.regionCounts).map(([region, count]) => (
+              <div key={region} className="rounded-[var(--radius-sm)] border bg-[var(--surface-muted)] p-3 space-y-1">
+                <div className="flex items-center gap-1.5 text-[var(--muted)] text-[10px] font-bold uppercase truncate">
+                  <MapPin className="size-3 shrink-0" />
+                  <span className="truncate">{region || 'Unspecified'}</span>
+                </div>
+                <div className="text-lg font-mono font-bold text-[var(--foreground)]">{count}</div>
+                <div className="text-[9px] text-[var(--muted)]">locations vaulted</div>
+              </div>
+            ))
+          )}
+        </div>
+      </Surface>
 
       <Surface className="overflow-hidden">
         <div className="grid gap-4 border-b p-4 lg:grid-cols-[1fr_auto] lg:items-center">

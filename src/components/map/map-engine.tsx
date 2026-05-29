@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Map, { Marker, NavigationControl, ViewStateChangeEvent, Source, Layer } from 'react-map-gl/maplibre';
 import useSupercluster from 'use-supercluster';
-import { Layers, LocateFixed, Mountain, MapPin, Rotate3D, X } from 'lucide-react';
+import { Layers, LocateFixed, Mountain, Rotate3D } from 'lucide-react';
 import { getDiscoveryById } from '@/app/actions/discovery';
 import { useQuery } from '@tanstack/react-query';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -169,6 +169,7 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
     loadGPXRoute();
   }, [gpxFiles]);
 
+  // Fly-to selected discovery if there is no GPX file overlay
   // 1. Session Storage Initialization
   const [mapMode, setMapMode] = React.useState<'STREET' | 'SATELLITE'>(() => {
     if (typeof window !== 'undefined') {
@@ -194,18 +195,33 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
     };
   });
 
-  const [clickedLocation, setClickedLocation] = React.useState<{ latitude: number; longitude: number } | null>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = sessionStorage.getItem('terrain_vault_clicked_location');
-      if (saved) {
-        try { return JSON.parse(saved); } catch (e) { console.error(e); }
+  // Fly-to selected discovery if there is no GPX file overlay
+  React.useEffect(() => {
+    if (activeDiscovery && activeDiscovery.latitude != null && activeDiscovery.longitude != null) {
+      const hasGpx = activeDiscovery.media?.some((m) => m.fileType === 'GPX');
+      if (!hasGpx) {
+        mapRef.current?.flyTo({
+          center: [activeDiscovery.longitude, activeDiscovery.latitude],
+          zoom: 12,
+          duration: 1500,
+        });
+        
+        // Defer setViewState to avoid synchronous cascading renders during commit phase
+        setTimeout(() => {
+          setViewState((prev) => ({
+            ...prev,
+            latitude: activeDiscovery.latitude!,
+            longitude: activeDiscovery.longitude!,
+            zoom: 12,
+          }));
+        }, 0);
       }
     }
-    return null;
-  });
+  }, [activeDiscovery]);
+
+
 
   const [userGeolocation, setUserGeolocation] = React.useState<{ latitude: number; longitude: number } | null>(null);
-  const [copiedPin, setCopiedPin] = React.useState(false);
   const [copiedUserPin, setCopiedUserPin] = React.useState(false);
   const [is3D, setIs3D] = React.useState(false);
 
@@ -232,15 +248,7 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
     }
   }, [viewState]);
 
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      if (clickedLocation) {
-        sessionStorage.setItem('terrain_vault_clicked_location', JSON.stringify(clickedLocation));
-      } else {
-        sessionStorage.removeItem('terrain_vault_clicked_location');
-      }
-    }
-  }, [clickedLocation]);
+
 
   // Load and apply AWS public Terrarium 3D elevation tiles to Maplibre
   React.useEffect(() => {
@@ -261,7 +269,7 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
 
         // Add Hillshade layer if not exists
         if (!map.getLayer('hillshade-layer')) {
-          const firstSymbolId = map.getStyle().layers.find((layer: any) => layer.type === 'symbol' || layer.id === 'reference' || layer.id === 'transportation')?.id;
+          const firstSymbolId = map.getStyle().layers.find((layer: { id: string; type: string }) => layer.type === 'symbol' || layer.id === 'reference' || layer.id === 'transportation')?.id;
           map.addLayer({
             id: 'hillshade-layer',
             type: 'hillshade',
@@ -430,14 +438,7 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
             setBounds([mapBounds.getWest(), mapBounds.getSouth(), mapBounds.getEast(), mapBounds.getNorth()]);
           }
         }}
-        onClick={(evt) => {
-          if (evt.lngLat) {
-            setClickedLocation({
-              latitude: evt.lngLat.lat,
-              longitude: evt.lngLat.lng,
-            });
-          }
-        }}
+
         style={{ width: '100%', height: '100%' }}
         mapStyle={activeMapStyle}
         maxZoom={18}
@@ -500,41 +501,7 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
           </Marker>
         )}
 
-        {/* Clicked / Dropped Pin Marker */}
-        {clickedLocation && (
-          <Marker latitude={clickedLocation.latitude} longitude={clickedLocation.longitude} anchor="bottom">
-            <div
-              className="relative flex flex-col items-center cursor-pointer group"
-              onClick={(e) => {
-                e.stopPropagation();
-                const textToCopy = `${clickedLocation.latitude.toFixed(6)}, ${clickedLocation.longitude.toFixed(6)}`;
-                navigator.clipboard.writeText(textToCopy);
-                setCopiedPin(true);
-                setTimeout(() => setCopiedPin(false), 2000);
-              }}
-            >
-              <div className="absolute -top-1 size-8 rounded-full bg-[var(--primary)]/20 animate-ping pointer-events-none" />
-              <div className="flex items-center gap-1.5 rounded-[var(--radius-md)] border-2 border-white bg-[var(--primary)] px-3.5 py-2 text-[var(--primary-foreground)] shadow-[var(--shadow-soft)] transition-transform active:scale-95">
-                <MapPin className="size-4 shrink-0" />
-                <span className="text-xs font-bold font-sans tracking-tight">
-                  {copiedPin ? 'Copied coordinates' : `Dropped pin (${clickedLocation.latitude.toFixed(2)}, ${clickedLocation.longitude.toFixed(2)})`}
-                </span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setClickedLocation(null);
-                  }}
-                  className="ml-1 rounded-full p-0.5 text-[var(--primary-foreground)]/80 transition hover:bg-white/10 hover:text-[var(--primary-foreground)]"
-                  title="Remove pin"
-                >
-                  <X className="size-3" />
-                </button>
-              </div>
-              <div className="h-3 w-1.5 rounded-b-sm bg-[var(--primary)] shadow-md" />
-            </div>
-          </Marker>
-        )}
+
 
         {clusters.map((cluster) => {
           const [longitude, latitude] = cluster.geometry.coordinates;

@@ -1,12 +1,12 @@
 'use client';
 
 import * as React from 'react';
-import Map, { Marker, NavigationControl, ViewStateChangeEvent, Source, Layer } from 'react-map-gl/maplibre';
+import { GoogleMap, useJsApiLoader, Polyline, OverlayView } from '@react-google-maps/api';
 import useSupercluster from 'use-supercluster';
 import { Layers, LocateFixed, Mountain, Rotate3D } from 'lucide-react';
 import { getDiscoveryById } from '@/app/actions/discovery';
 import { useQuery } from '@tanstack/react-query';
-import 'maplibre-gl/dist/maplibre-gl.css';
+
 interface DiscoveryMapItem {
   id: string;
   name: string;
@@ -29,60 +29,6 @@ interface MapEngineProps {
   onSelectDiscovery: (id: string) => void;
 }
 
-const MAP_STYLES = {
-  STREET: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-  SATELLITE: {
-    version: 8,
-    sources: {
-      'esri-satellite': {
-        type: 'raster',
-        tiles: [
-          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-        ],
-        tileSize: 256,
-        attribution: 'Tiles © Esri'
-      },
-      'esri-reference': {
-        type: 'raster',
-        tiles: [
-          'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'
-        ],
-        tileSize: 256
-      },
-      'esri-transportation': {
-        type: 'raster',
-        tiles: [
-          'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}'
-        ],
-        tileSize: 256
-      }
-    },
-    layers: [
-      {
-        id: 'satellite',
-        type: 'raster',
-        source: 'esri-satellite',
-        minzoom: 0,
-        maxzoom: 18
-      },
-      {
-        id: 'transportation',
-        type: 'raster',
-        source: 'esri-transportation',
-        minzoom: 0,
-        maxzoom: 18
-      },
-      {
-        id: 'reference',
-        type: 'raster',
-        source: 'esri-reference',
-        minzoom: 0,
-        maxzoom: 18
-      }
-    ]
-  }
-};
-
 interface ViewState {
   latitude: number;
   longitude: number;
@@ -92,10 +38,14 @@ interface ViewState {
 }
 
 export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: MapEngineProps) {
-  const mapRef = React.useRef<import('react-map-gl/maplibre').MapRef>(null);
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
+  });
+
+  const [map, setMap] = React.useState<google.maps.Map | null>(null);
 
   // GPX Active Dossier Overlay State & Query
-  const [routeLine, setRouteLine] = React.useState<[number, number][] | null>(null);
+  const [routeLine, setRouteLine] = React.useState<{lat: number, lng: number}[] | null>(null);
 
   const { data: activeDiscovery } = useQuery({
     queryKey: ['active-dossier-map', activeDossierId],
@@ -131,34 +81,27 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
         const parser = new DOMParser();
         const xml = parser.parseFromString(text, 'text/xml');
         const trkpts = xml.getElementsByTagName('trkpt');
-        const coords: [number, number][] = [];
+        const coords: {lat: number, lng: number}[] = [];
 
         for (let i = 0; i < trkpts.length; i++) {
           const pt = trkpts[i];
           const lat = parseFloat(pt.getAttribute('lat') || '0');
           const lon = parseFloat(pt.getAttribute('lon') || '0');
           if (lat && lon) {
-            coords.push([lon, lat]);
+            coords.push({ lat, lng: lon });
           }
         }
 
         if (coords.length > 0) {
           setRouteLine(coords);
 
-          // Fit bounds to make the route overlay beautifully centered
-          let minLat = Infinity, maxLat = -Infinity;
-          let minLon = Infinity, maxLon = -Infinity;
-          for (const [lon, lat] of coords) {
-            if (lat < minLat) minLat = lat;
-            if (lat > maxLat) maxLat = lat;
-            if (lon < minLon) minLon = lon;
-            if (lon > maxLon) maxLon = lon;
+          if (map) {
+            const bounds = new google.maps.LatLngBounds();
+            for (const coord of coords) {
+              bounds.extend(coord);
+            }
+            map.fitBounds(bounds, 80);
           }
-
-          mapRef.current?.fitBounds(
-            [minLon, minLat, maxLon, maxLat],
-            { padding: 80, duration: 1500 }
-          );
         }
       } catch (err) {
         console.error('GPX map overlay parse error:', err);
@@ -167,16 +110,29 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
     };
 
     loadGPXRoute();
-  }, [gpxFiles]);
+  }, [gpxFiles, map]);
 
-  // Fly-to selected discovery if there is no GPX file overlay
+  const [userGeolocation, setUserGeolocation] = React.useState<{ latitude: number; longitude: number } | null>(null);
+  const [copiedUserPin, setCopiedUserPin] = React.useState(false);
+  const [is3D, setIs3D] = React.useState(true); // Default to 3D enabled
+
+  // Track if we restored from session storage so we don't overwrite with initial geolocation flyTo
+  const isRestoredSession = React.useRef(false);
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (sessionStorage.getItem('terrain_vault_view_state')) {
+        isRestoredSession.current = true;
+      }
+    }
+  }, []);
+
   // 1. Session Storage Initialization
   const [mapMode, setMapMode] = React.useState<'STREET' | 'SATELLITE'>(() => {
     if (typeof window !== 'undefined') {
       const saved = sessionStorage.getItem('terrain_vault_map_mode');
       if (saved === 'STREET' || saved === 'SATELLITE') return saved;
     }
-    return 'STREET';
+    return 'SATELLITE'; // Default to Satellite for Google Earth look
   });
 
   const [viewState, setViewState] = React.useState<ViewState>(() => {
@@ -200,13 +156,11 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
     if (activeDiscovery && activeDiscovery.latitude != null && activeDiscovery.longitude != null) {
       const hasGpx = activeDiscovery.media?.some((m) => m.fileType === 'GPX');
       if (!hasGpx) {
-        mapRef.current?.flyTo({
-          center: [activeDiscovery.longitude, activeDiscovery.latitude],
-          zoom: 12,
-          duration: 1500,
-        });
+        if (map) {
+          map.panTo({ lat: activeDiscovery.latitude, lng: activeDiscovery.longitude });
+          map.setZoom(12);
+        }
         
-        // Defer setViewState to avoid synchronous cascading renders during commit phase
         setTimeout(() => {
           setViewState((prev) => ({
             ...prev,
@@ -217,25 +171,8 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
         }, 0);
       }
     }
-  }, [activeDiscovery]);
+  }, [activeDiscovery, map]);
 
-
-
-  const [userGeolocation, setUserGeolocation] = React.useState<{ latitude: number; longitude: number } | null>(null);
-  const [copiedUserPin, setCopiedUserPin] = React.useState(false);
-  const [is3D, setIs3D] = React.useState(false);
-
-  // Track if we restored from session storage so we don't overwrite with initial geolocation flyTo
-  const isRestoredSession = React.useRef(false);
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      if (sessionStorage.getItem('terrain_vault_view_state')) {
-        isRestoredSession.current = true;
-      }
-    }
-  }, []);
-
-  // Save state changes to sessionStorage
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('terrain_vault_map_mode', mapMode);
@@ -248,58 +185,6 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
     }
   }, [viewState]);
 
-
-
-  // Load and apply AWS public Terrarium 3D elevation tiles to Maplibre
-  React.useEffect(() => {
-    const map = mapRef.current?.getMap();
-    if (!map) return;
-
-    const applyTerrain = () => {
-      if (is3D) {
-        if (!map.getSource('terrain-source')) {
-          map.addSource('terrain-source', {
-            type: 'raster-dem',
-            tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
-            encoding: 'terrarium',
-            tileSize: 256,
-          });
-        }
-        map.setTerrain({ source: 'terrain-source', exaggeration: 1.5 });
-
-        // Add Hillshade layer if not exists
-        if (!map.getLayer('hillshade-layer')) {
-          const firstSymbolId = map.getStyle().layers.find((layer: { id: string; type: string }) => layer.type === 'symbol' || layer.id === 'reference' || layer.id === 'transportation')?.id;
-          map.addLayer({
-            id: 'hillshade-layer',
-            type: 'hillshade',
-            source: 'terrain-source',
-            paint: {
-              'hillshade-shadow-color': '#0f172a',
-              'hillshade-highlight-color': '#ffffff',
-              'hillshade-exaggeration': 0.8
-            }
-          }, firstSymbolId);
-        }
-
-
-      } else {
-        map.setTerrain(null);
-        if (map.getLayer('hillshade-layer')) map.removeLayer('hillshade-layer');
-      }
-    };
-
-    if (map.isStyleLoaded()) {
-      applyTerrain();
-    } else {
-      map.on('style.load', applyTerrain);
-    }
-
-    return () => {
-      map.off('style.load', applyTerrain);
-    };
-  }, [is3D, mapMode]);
-
   React.useEffect(() => {
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
@@ -311,11 +196,10 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
 
           // Only flyTo and update viewState if we didn't restore a saved session state!
           if (!isRestoredSession.current) {
-            mapRef.current?.flyTo({
-              center: [position.coords.longitude, position.coords.latitude],
-              zoom: 10,
-              duration: 2000,
-            });
+            if (map) {
+              map.panTo({ lat: position.coords.latitude, lng: position.coords.longitude });
+              map.setZoom(10);
+            }
             setViewState((prev) => ({
               ...prev,
               latitude: position.coords.latitude,
@@ -329,7 +213,7 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
         }
       );
     }
-  }, []);
+  }, [map]);
 
   const points = React.useMemo(() => {
     return discoveries.map((d) => ({
@@ -350,11 +234,32 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
   const [bounds, setBounds] = React.useState<[number, number, number, number]>([-180, -90, 180, 90]);
 
   React.useEffect(() => {
-    if (mapRef.current) {
-      const mapBounds = mapRef.current.getMap().getBounds();
-      setBounds([mapBounds.getWest(), mapBounds.getSouth(), mapBounds.getEast(), mapBounds.getNorth()]);
+    if (map) {
+      const updateBounds = () => {
+        const mapBounds = map.getBounds();
+        if (mapBounds) {
+          const ne = mapBounds.getNorthEast();
+          const sw = mapBounds.getSouthWest();
+          setBounds([sw.lng(), sw.lat(), ne.lng(), ne.lat()]);
+        }
+        setViewState((prev) => ({
+          ...prev,
+          zoom: map.getZoom() || prev.zoom,
+          latitude: map.getCenter()?.lat() || prev.latitude,
+          longitude: map.getCenter()?.lng() || prev.longitude,
+          bearing: map.getHeading() || prev.bearing,
+          pitch: map.getTilt() || prev.pitch,
+        }));
+      };
+      
+      const listener = map.addListener('idle', updateBounds);
+      updateBounds();
+
+      return () => {
+        google.maps.event.removeListener(listener);
+      };
     }
-  }, [viewState]);
+  }, [map]);
 
   const { clusters, supercluster } = useSupercluster({
     points,
@@ -363,7 +268,13 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
     options: { radius: 50, maxZoom: 14 },
   });
 
-  const activeMapStyle = mapMode === 'STREET' ? MAP_STYLES.STREET : (MAP_STYLES.SATELLITE as unknown as import('maplibre-gl').StyleSpecification);
+  const activeMapTypeId = React.useMemo(() => {
+    if (is3D) return 'terrain';
+    return mapMode === 'STREET' ? 'roadmap' : 'satellite';
+  }, [mapMode, is3D]);
+
+  if (loadError) return <div>Error loading maps</div>;
+  if (!isLoaded) return <div className="h-full w-full bg-[var(--background)] flex items-center justify-center text-[var(--muted)]">Loading Map...</div>;
 
   return (
     <div className="relative h-full w-full bg-[var(--background)]">
@@ -371,16 +282,16 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
       <div className="absolute right-4 top-4 z-10 flex items-center gap-1 rounded-[var(--radius-md)] border bg-[var(--surface)]/95 p-1 font-sans shadow-[var(--shadow-soft)] backdrop-blur">
         <button
           type="button"
-          onClick={() => setMapMode('STREET')}
-          className={`flex items-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold transition ${mapMode === 'STREET' ? 'bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--foreground)]'}`}
+          onClick={() => { setMapMode('STREET'); setIs3D(false); }}
+          className={`flex items-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold transition ${mapMode === 'STREET' && !is3D ? 'bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--foreground)]'}`}
         >
           <Layers className="size-3.5" />
           Street
         </button>
         <button
           type="button"
-          onClick={() => setMapMode('SATELLITE')}
-          className={`rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold transition ${mapMode === 'SATELLITE' ? 'bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--foreground)]'}`}
+          onClick={() => { setMapMode('SATELLITE'); setIs3D(false); }}
+          className={`rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold transition ${mapMode === 'SATELLITE' && !is3D ? 'bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--foreground)]'}`}
         >
           Satellite
         </button>
@@ -390,24 +301,10 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
           onClick={() => {
             const new3D = !is3D;
             setIs3D(new3D);
-            if (new3D) {
-              mapRef.current?.easeTo({
-                pitch: 60,
-                duration: 1000,
-              });
-              setViewState((prev) => ({
-                ...prev,
-                pitch: 60,
-              }));
-            } else {
-              mapRef.current?.easeTo({
-                pitch: 0,
-                duration: 1000,
-              });
-              setViewState((prev) => ({
-                ...prev,
-                pitch: 0,
-              }));
+            if (map && new3D) {
+              map.setTilt(45);
+            } else if (map) {
+              map.setTilt(0);
             }
           }}
           className={`flex items-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold transition ${
@@ -417,91 +314,64 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
           }`}
         >
           <Rotate3D className="size-3.5" />
-          3D
+          3D Terrain
         </button>
       </div>
 
-      <Map
-        ref={mapRef}
-        {...viewState}
-        maxPitch={85}
-        onMove={(evt: ViewStateChangeEvent) => setViewState(evt.viewState)}
-        onLoad={() => {
-          if (mapRef.current) {
-            const mapBounds = mapRef.current.getMap().getBounds();
-            setBounds([mapBounds.getWest(), mapBounds.getSouth(), mapBounds.getEast(), mapBounds.getNorth()]);
-          }
+      <GoogleMap
+        mapContainerStyle={{ width: '100%', height: '100%' }}
+        center={{ lat: viewState.latitude, lng: viewState.longitude }}
+        zoom={viewState.zoom}
+        tilt={is3D ? 45 : 0}
+        options={{
+          mapTypeId: activeMapTypeId,
+          disableDefaultUI: false,
+          streetViewControl: true,
+          mapTypeControl: false,
         }}
-        onResize={() => {
-          if (mapRef.current) {
-            const mapBounds = mapRef.current.getMap().getBounds();
-            setBounds([mapBounds.getWest(), mapBounds.getSouth(), mapBounds.getEast(), mapBounds.getNorth()]);
-          }
-        }}
-
-        style={{ width: '100%', height: '100%' }}
-        mapStyle={activeMapStyle}
-        maxZoom={18}
-        minZoom={3}
+        onLoad={setMap}
       >
-        <NavigationControl position="bottom-right" />
-
         {/* GPX Route Polyline Overlay */}
         {routeLine && routeLine.length > 0 && (
-          <Source
-            id="route-polyline"
-            type="geojson"
-            data={{
-              type: 'Feature',
-              properties: {},
-              geometry: {
-                type: 'LineString',
-                coordinates: routeLine,
-              },
+          <Polyline
+            path={routeLine}
+            options={{
+              strokeColor: '#0ea5e9',
+              strokeWeight: 5,
+              strokeOpacity: 0.85,
             }}
-          >
-            <Layer
-              id="route-line-layer"
-              type="line"
-              layout={{
-                'line-join': 'round',
-                'line-cap': 'round',
-              }}
-              paint={{
-                'line-color': '#0ea5e9',
-                'line-width': 5,
-                'line-opacity': 0.85,
-              }}
-            />
-          </Source>
+          />
         )}
 
         {/* User Actual Geolocation Marker */}
         {userGeolocation && (
-          <Marker latitude={userGeolocation.latitude} longitude={userGeolocation.longitude} anchor="bottom">
-            <div
-              className="relative flex flex-col items-center cursor-pointer group"
-              onClick={(e) => {
-                e.stopPropagation();
-                const textToCopy = `${userGeolocation.latitude.toFixed(6)}, ${userGeolocation.longitude.toFixed(6)}`;
-                navigator.clipboard.writeText(textToCopy);
-                setCopiedUserPin(true);
-                setTimeout(() => setCopiedUserPin(false), 2000);
-              }}
-            >
-              <div className="absolute -top-1 size-8 rounded-full bg-[var(--accent)]/25 animate-ping pointer-events-none" />
-              <div className="flex items-center gap-1.5 rounded-[var(--radius-md)] border-2 border-white bg-[var(--accent)] px-3.5 py-2 text-white shadow-[var(--shadow-soft)] transition-transform active:scale-95 dark:text-zinc-950">
-                <LocateFixed className="size-4 shrink-0" />
-                <span className="text-xs font-bold font-sans tracking-tight">
-                  {copiedUserPin ? 'Copied coordinates' : 'My location'}
-                </span>
+          <OverlayView
+            position={{ lat: userGeolocation.latitude, lng: userGeolocation.longitude }}
+            mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+          >
+            <div style={{ transform: 'translate(-50%, -100%)' }}>
+              <div
+                className="relative flex flex-col items-center cursor-pointer group"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const textToCopy = `${userGeolocation.latitude.toFixed(6)}, ${userGeolocation.longitude.toFixed(6)}`;
+                  navigator.clipboard.writeText(textToCopy);
+                  setCopiedUserPin(true);
+                  setTimeout(() => setCopiedUserPin(false), 2000);
+                }}
+              >
+                <div className="absolute -top-1 size-8 rounded-full bg-[var(--accent)]/25 animate-ping pointer-events-none" />
+                <div className="flex items-center gap-1.5 rounded-[var(--radius-md)] border-2 border-white bg-[var(--accent)] px-3.5 py-2 text-white shadow-[var(--shadow-soft)] transition-transform active:scale-95 dark:text-zinc-950">
+                  <LocateFixed className="size-4 shrink-0" />
+                  <span className="text-xs font-bold font-sans tracking-tight">
+                    {copiedUserPin ? 'Copied coordinates' : 'My location'}
+                  </span>
+                </div>
+                <div className="h-3 w-1.5 rounded-b-sm bg-[var(--accent)] shadow-md" />
               </div>
-              <div className="h-3 w-1.5 rounded-b-sm bg-[var(--accent)] shadow-md" />
             </div>
-          </Marker>
+          </OverlayView>
         )}
-
-
 
         {clusters.map((cluster) => {
           const [longitude, latitude] = cluster.geometry.coordinates;
@@ -509,59 +379,70 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
 
           if (isCluster) {
             return (
-              <Marker key={`cluster-${cluster.id}`} latitude={latitude} longitude={longitude}>
-                <div
-                  className="flex size-10 cursor-pointer items-center justify-center rounded-full border-2 border-[var(--accent)] bg-[var(--surface)] text-sm font-bold text-[var(--accent)] shadow-[var(--shadow-soft)] backdrop-blur transition-transform hover:scale-105"
-                  onClick={() => {
-                    const expansionZoom = Math.min(supercluster?.getClusterExpansionZoom(cluster.id as number) || 12, 16);
-                    mapRef.current?.flyTo({
-                      center: [longitude, latitude],
-                      zoom: expansionZoom,
-                      duration: 800,
-                    });
-                  }}
-                >
-                  {pointCount}
+              <OverlayView
+                key={`cluster-${cluster.id}`}
+                position={{ lat: latitude, lng: longitude }}
+                mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+              >
+                <div style={{ transform: 'translate(-50%, -50%)' }}>
+                  <div
+                    className="flex size-10 cursor-pointer items-center justify-center rounded-full border-2 border-[var(--accent)] bg-[var(--surface)] text-sm font-bold text-[var(--accent)] shadow-[var(--shadow-soft)] backdrop-blur transition-transform hover:scale-105"
+                    onClick={() => {
+                      const expansionZoom = Math.min(supercluster?.getClusterExpansionZoom(cluster.id as number) || 12, 16);
+                      if (map) {
+                        map.panTo({ lat: latitude, lng: longitude });
+                        map.setZoom(expansionZoom);
+                      }
+                    }}
+                  >
+                    {pointCount}
+                  </div>
                 </div>
-              </Marker>
+              </OverlayView>
             );
           }
 
           return (
-            <Marker key={`marker-${discoveryId}`} latitude={latitude} longitude={longitude} anchor="bottom">
-              <div
-                className="group relative flex flex-col items-center cursor-pointer"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelectDiscovery(discoveryId);
-                }}
-              >
-                {/* Tooltip on hover */}
-                <div className="absolute bottom-full mb-2 hidden group-hover:flex flex-col items-center pointer-events-none z-20">
-                  <div className="flex items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-sm)] border bg-[var(--surface)] px-3 py-1.5 font-sans text-sm text-[var(--foreground)] shadow-[var(--shadow-soft)]">
-                    <span className="font-bold">{name}</span>
-                    {elevation && <span className="font-semibold text-[var(--accent)]">({elevation}m)</span>}
-                  </div>
-                  <div className="-mt-1 size-2 rotate-45 border-b border-r bg-[var(--surface)]" />
-                </div>
-
-                {/* Marker Pin */}
+            <OverlayView
+              key={`marker-${discoveryId}`}
+              position={{ lat: latitude, lng: longitude }}
+              mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+            >
+              <div style={{ transform: 'translate(-50%, -100%)' }}>
                 <div
-                  className={`flex items-center gap-1.5 rounded-[var(--radius-sm)] border px-3 py-1.5 shadow-sm backdrop-blur transition-all group-hover:scale-105 group-hover:shadow-[var(--shadow-soft)] ${
-                    activeDossierId === discoveryId
-                      ? 'border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]'
-                      : 'border-[var(--border)] bg-[var(--surface)]/95 text-[var(--foreground)] hover:bg-[var(--surface)]'
-                  }`}
+                  className="group relative flex flex-col items-center cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectDiscovery(discoveryId);
+                  }}
                 >
-                  <Mountain className="size-4 text-[var(--accent)]" />
-                  <span className="text-xs font-bold font-sans tracking-tight max-w-[120px] truncate">{name}</span>
+                  {/* Tooltip on hover */}
+                  <div className="absolute bottom-full mb-2 hidden group-hover:flex flex-col items-center pointer-events-none z-20">
+                    <div className="flex items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-sm)] border bg-[var(--surface)] px-3 py-1.5 font-sans text-sm text-[var(--foreground)] shadow-[var(--shadow-soft)]">
+                      <span className="font-bold">{name}</span>
+                      {elevation && <span className="font-semibold text-[var(--accent)]">({elevation}m)</span>}
+                    </div>
+                    <div className="-mt-1 size-2 rotate-45 border-b border-r bg-[var(--surface)]" />
+                  </div>
+
+                  {/* Marker Pin */}
+                  <div
+                    className={`flex items-center gap-1.5 rounded-[var(--radius-sm)] border px-3 py-1.5 shadow-sm backdrop-blur transition-all group-hover:scale-105 group-hover:shadow-[var(--shadow-soft)] ${
+                      activeDossierId === discoveryId
+                        ? 'border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]'
+                        : 'border-[var(--border)] bg-[var(--surface)]/95 text-[var(--foreground)] hover:bg-[var(--surface)]'
+                    }`}
+                  >
+                    <Mountain className="size-4 text-[var(--accent)]" />
+                    <span className="text-xs font-bold font-sans tracking-tight max-w-[120px] truncate">{name}</span>
+                  </div>
+                  <div className="h-2.5 w-1 rounded-b-sm bg-[var(--border-strong)] shadow-sm" />
                 </div>
-                <div className="h-2.5 w-1 rounded-b-sm bg-[var(--border-strong)] shadow-sm" />
               </div>
-            </Marker>
+            </OverlayView>
           );
         })}
-      </Map>
+      </GoogleMap>
     </div>
   );
 }

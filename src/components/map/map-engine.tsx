@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { GoogleMap, useJsApiLoader, Polyline, OverlayView } from '@react-google-maps/api';
 import useSupercluster from 'use-supercluster';
-import { Layers, LocateFixed, Mountain, Rotate3D } from 'lucide-react';
+import { Layers, LocateFixed, Mountain } from 'lucide-react';
 import { getDiscoveryById } from '@/app/actions/discovery';
 import { useQuery } from '@tanstack/react-query';
 
@@ -114,7 +114,6 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
 
   const [userGeolocation, setUserGeolocation] = React.useState<{ latitude: number; longitude: number } | null>(null);
   const [copiedUserPin, setCopiedUserPin] = React.useState(false);
-  const [is3D, setIs3D] = React.useState(true); // Default to 3D enabled
 
   // Track if we restored from session storage so we don't overwrite with initial geolocation flyTo
   const isRestoredSession = React.useRef(false);
@@ -269,9 +268,8 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
   });
 
   const activeMapTypeId = React.useMemo(() => {
-    if (is3D) return 'terrain';
     return mapMode === 'STREET' ? 'roadmap' : 'satellite';
-  }, [mapMode, is3D]);
+  }, [mapMode]);
 
   if (loadError) return <div>Error loading maps</div>;
   if (!isLoaded) return <div className="h-full w-full bg-[var(--background)] flex items-center justify-center text-[var(--muted)]">Loading Map...</div>;
@@ -282,39 +280,18 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
       <div className="absolute right-4 top-4 z-10 flex items-center gap-1 rounded-[var(--radius-md)] border bg-[var(--surface)]/95 p-1 font-sans shadow-[var(--shadow-soft)] backdrop-blur">
         <button
           type="button"
-          onClick={() => { setMapMode('STREET'); setIs3D(false); }}
-          className={`flex items-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold transition ${mapMode === 'STREET' && !is3D ? 'bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--foreground)]'}`}
+          onClick={() => { setMapMode('STREET'); }}
+          className={`flex items-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold transition ${mapMode === 'STREET' ? 'bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--foreground)]'}`}
         >
           <Layers className="size-3.5" />
           Street
         </button>
         <button
           type="button"
-          onClick={() => { setMapMode('SATELLITE'); setIs3D(false); }}
-          className={`rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold transition ${mapMode === 'SATELLITE' && !is3D ? 'bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--foreground)]'}`}
+          onClick={() => { setMapMode('SATELLITE'); }}
+          className={`rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold transition ${mapMode === 'SATELLITE' ? 'bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--foreground)]'}`}
         >
           Satellite
-        </button>
-        <div className="mx-1 h-4 w-px bg-[var(--border)]" />
-        <button
-          type="button"
-          onClick={() => {
-            const new3D = !is3D;
-            setIs3D(new3D);
-            if (map && new3D) {
-              map.setTilt(45);
-            } else if (map) {
-              map.setTilt(0);
-            }
-          }}
-          className={`flex items-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold transition ${
-            is3D 
-              ? 'bg-[var(--accent)] text-white shadow-sm dark:text-zinc-950' 
-              : 'text-[var(--muted)] hover:text-[var(--foreground)]'
-          }`}
-        >
-          <Rotate3D className="size-3.5" />
-          3D Terrain
         </button>
       </div>
 
@@ -322,7 +299,7 @@ export function MapEngine({ discoveries, activeDossierId, onSelectDiscovery }: M
         mapContainerStyle={{ width: '100%', height: '100%' }}
         center={{ lat: viewState.latitude, lng: viewState.longitude }}
         zoom={viewState.zoom}
-        tilt={is3D ? 45 : 0}
+        tilt={0}
         options={{
           mapTypeId: activeMapTypeId,
           disableDefaultUI: false,
